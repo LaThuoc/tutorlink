@@ -30,12 +30,14 @@ export async function middleware(request: NextRequest){
     const pathname = request.nextUrl.pathname
 
     const protectedRoutes = ['/dashboard', '/profile', '/admin']
-    const authRoutes = ['/login', '/register', '/forgot-password']
+    const authRoutes = ['/login', '/register', '/forgot-password', '/reset-password']
+    const adminRoute = ['/admin']
 
     const isProtectedRoute = protectedRoutes.some((path) => pathname.startsWith(path))
     const isAuthRoute = authRoutes.some((path) => pathname.startsWith(path))
+    const isAdminRoute = adminRoute.some((path) => pathname.startsWith(path))
     
-    if(isProtectedRoute || isAuthRoute){
+    if(isProtectedRoute || isAuthRoute || isAdminRoute){
         const {data : {user}} = await supabase.auth.getUser()
 
         if(isProtectedRoute && !user){
@@ -58,3 +60,18 @@ export const config = {
         '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
     ],
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
