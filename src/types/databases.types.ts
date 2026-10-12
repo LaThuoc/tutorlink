@@ -59,7 +59,7 @@ export interface Database {
           certificates: string[] | null
           schedules: string[] | null
           is_verified: boolean
-          verification_status: 'draft' | 'pending' | 'approved' | 'rejected'
+          verification_status: 'Draft' | 'Pending' | 'Approved' | 'Rejected'
           rejection_reason: string | null
         }
         Insert: {
@@ -76,7 +76,7 @@ export interface Database {
           certificates?: string[] | null
           schedules?: string[] | null
           is_verified?: boolean
-          verification_status?: 'draft' | 'pending' | 'approved' | 'rejected'
+          verification_status?: 'Draft' | 'Pending' | 'Approved' | 'Rejected'
           rejection_reason?: string | null
         }
         Update: {
@@ -93,7 +93,7 @@ export interface Database {
           certificates?: string[] | null
           schedules?: string[] | null
           is_verified?: boolean
-          verification_status?: 'draft' | 'pending' | 'approved' | 'rejected'
+          verification_status?: 'Draft' | 'Pending' | 'Approved' | 'Rejected'
           rejection_reason?: string | null
         }
       }
@@ -102,7 +102,7 @@ export interface Database {
           id: string
           tutor_id: string
           certificate_url: string
-          status: 'pending' | 'approved' | 'rejected'
+          status: 'Pending' | 'Approved' | 'Rejected'
           rejection_reason: string | null
           created_at: string
         }
@@ -110,7 +110,7 @@ export interface Database {
           id?: string
           tutor_id: string
           certificate_url: string
-          status?: 'pending' | 'approved' | 'rejected'
+          status?: 'Pending' | 'Approved' | 'Rejected'
           rejection_reason?: string | null
           created_at?: string
         }
@@ -118,7 +118,7 @@ export interface Database {
           id?: string
           tutor_id?: string
           certificate_url?: string
-          status?: 'pending' | 'approved' | 'rejected'
+          status?: 'Pending' | 'Approved' | 'Rejected'
           rejection_reason?: string | null
           created_at?: string
         }
