@@ -17,6 +17,13 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
         }
     }
 
+    const {data: currentTutor} = await supabase
+        .from('tutor_profiles')
+        .select('verification_status, is_verified, education, certificates')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+
     let rawSubjectDetails = []
     try {
         const jsonString = formData.get('subjectDetails') as string
@@ -50,10 +57,31 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
     if(!validationResult.success){
         return {
             success: false,
-            errors: 'Vui lòng kiểm tra lại thông tin nhập vào',
+            errors: 'Vui lòng kiểm tra lại thông tin',
             fieldErrors: validationResult.error.flatten().fieldErrors
         }
     }
+
+
+    const data = validationResult.data
+    const isNewTutor = !currentTutor
+    const isAlreadyApproved = currentTutor?.verification_status === 'Approved'
+
+    let finalCertificates: string[] = []
+
+    if (isNewTutor) {
+        if (data.certificates.length === 0) {
+        return {
+            success: false,
+            errors: 'Vui lòng tải lên ít nhất 1 bằng cấp/chứng chỉ để tạo hồ sơ gửi duyệt.',
+        }
+        }
+        finalCertificates = data.certificates 
+    } else {
+        finalCertificates = currentTutor?.certificates || []
+    }
+
+    const targetStatus = isNewTutor ? 'Pending' : (isAlreadyApproved ? 'Approved' : (currentTutor?.verification_status || 'Draft'))
 
     const {
         fullName,
@@ -68,7 +96,6 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
         teachingAreas,
         achievements,
         skills,
-        certificates,
         schedules,
     } = validationResult.data
 
@@ -103,8 +130,10 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
         teaching_areas: teachingAreas,
         achievements,
         skills,
-        certificates,
-        schedules
+        certificates: finalCertificates,
+        schedules,
+        verification_status: targetStatus,
+        is_verified: isAlreadyApproved ? true : false
     })
 
     if(tutorError){
@@ -146,7 +175,7 @@ export async function updateTutorSchedules(prevState: TutorActionState, formData
 }
 
 
-export async function requestVerification(): Promise<TutorActionState | void>{
+export async function submitNewVerification(certificateUrl: string): Promise<TutorActionState | void>{
     const supabase = await createClient()
 
     const {data: {user}} = await supabase.auth.getUser()
@@ -157,23 +186,77 @@ export async function requestVerification(): Promise<TutorActionState | void>{
             errors: 'Bạn chưa đăng nhập'
         }
     }
-    const {data: tutor} = await supabase
-        .from('tutor_profiles')
-        .select('education, subject_details, certificates')
-        .eq('id', user.id)
-        .single()
-    if(!tutor || !tutor.education || !tutor.subject_details.length ){
+    if(!certificateUrl){
         return {
             success: false,
-            errors: 'Vui lòng hoạn thiện Học vấn và Môn dạy trước khi gửi yêu cầu duyệt'
+            errors: 'Đường dẫn chứng chỉ không được để trống'
         }
     }
-    if(!tutor.certificates || tutor.certificates.length === 0){
+    const {error} = await supabase.from('certificate_requests').insert({
+        tutor_id: user.id,
+        certificate_url: certificateUrl,
+        status: 'Pending'
+    })
+    if(error){
         return {
             success: false,
-            errors: 'Vui lòng tải lên ít nhất 1 chứng chỉ/bằng cấp để hệ thống phê duyệt'
+            errors: error.message
         }
     }
 
-    const {error} = await supabase.from('tutor_profiles').update()
+    revalidatePath('/dashboard/profile')
+    revalidatePath('/admin/certificates')
+    
+    return {success: true}
+}
+
+
+export async function removeCertificates(certificatesUrl: string[]): Promise<TutorActionState| void>{
+    const supabase = await createClient()
+
+    const { data: { user}} = await supabase.auth.getUser()
+
+    if(!user){
+        return {
+            success: false,
+            errors: 'Bạn chưa đăng nhập'
+        }
+    }
+
+    if(!certificatesUrl || certificatesUrl.length === 0){
+        return {
+            success: false,
+            errors: 'Vui lòng chọn ít nhất 1 chứng chỉ để xóa'
+        }
+    }
+
+    const {data: tutor} = await supabase.from('tutor_profiles').select('certificates').eq('user_id', user.id).single()
+
+    if(!tutor){
+        return {
+            success: false,
+            errors: 'Không tìm thấy hồ sơ'
+        }
+    }
+
+    const currentCertificates = tutor.certificates || []
+
+    const updatedCertificates = currentCertificates.filter((url: string) => !certificatesUrl.includes(url))
+
+    const {error} = await supabase
+        .from('tutor_profiles')
+        .update({certificates: updatedCertificates})
+        .eq('user_id', user.id)
+
+    if(error){
+        return {
+            success: false,
+            errors: error.message
+        }
+    }
+
+    revalidatePath('/dashboard/profile')
+    revalidatePath(`/tutors/${user.id}`)
+
+    return { success: true }
 }
