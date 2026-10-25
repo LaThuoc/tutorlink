@@ -11,7 +11,24 @@ export async function GET(request: Request){
         const {error} = await supabase.auth.exchangeCodeForSession(code)
 
         if(!error){
-            return NextResponse.redirect(`${origin}${next}`)
+            const {data: {user}} = await supabase.auth.getUser()
+            if(user){
+                const {data: profile} = await supabase.from('profiles')
+                    .select('role')
+                    .eq('id', user.id)
+                    .single()
+                const role = profile?.role
+                if(next){
+                    return NextResponse.redirect(`${origin}${next}`)
+                }
+                if(role === 'admin'){
+                    return NextResponse.redirect(`${origin}/admin`)
+                }else if (role === 'tutor'){
+                    return NextResponse.redirect(`${origin}/dashboard/tutor`)
+                }else {
+                    return NextResponse.redirect(`${origin}/dashboard/student`)
+                }
+            }
         }
     }
     return NextResponse.redirect(`${origin}/login?error=oauth_failed`)
