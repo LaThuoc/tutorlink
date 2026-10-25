@@ -5,6 +5,7 @@ import { signupSchema, loginSchema } from "../validations/auth.schema"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { ActionState } from "../types/auth.type"
+import { createClient as createBasicClient } from "@supabase/supabase-js"
 
 
 export async function signup(prevState: ActionState, formData: FormData): Promise<ActionState | void>{
@@ -21,13 +22,17 @@ export async function signup(prevState: ActionState, formData: FormData): Promis
     if(!validationResult.success){
         return {
             success: false,
-            errors: 'Vui lòng kiểm tra lại thông tin nhấp',
+            errors: 'Vui lòng kiểm tra lại thông tin nhập vào',
             fieldErrors: validationResult.error.flatten().fieldErrors,
         }
     }
     const {email, password, fullName, role} = validationResult.data
 
-    const { data: existingUser} = await supabase.from('profiles').select('id').eq('email', email).maybeSingle()
+    const { data: existingUser} = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle()
 
     if(existingUser){
         return {
@@ -38,7 +43,7 @@ export async function signup(prevState: ActionState, formData: FormData): Promis
             }
         }
     }
-    const {error} = await supabase.auth.signUp({
+    const {data: authData, error} = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -63,45 +68,34 @@ export async function signup(prevState: ActionState, formData: FormData): Promis
             errors: error.message
         }
     }
+    if(authData.user && role === 'tutor'){
+        const {error: tutorError} = await supabase.from('tutor_profiles')
+            .insert({
+                user_id: authData.user.id,
+                verification_status: 'Draft',
+                is_verified: false
+            })
+        if(tutorError){
+            console.error('Lỗi khởi tạo hồ sơ gia sư', tutorError.message)
+            const supabaseAdmin = createBasicClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.SUPABASE_SERVICE_ROLE_KEY!
+            )
+            await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+            return {
+                success: false,
+                errors: 'Hệ thống gặp sự cố khi khởi tạo hồ sơ gia sư. Vui lòng thử lại sau.'
+            }
+        }
+    }
+
     await supabase.auth.signOut()
     revalidatePath('/', 'layout')
     redirect('/login?signup=success')
 }
 
 
-export async function login(prevState: ActionState, formData: FormData){
-    const supabase = await createClient()
-
-    const rawData = {
-        email: formData.get('email'),
-        password: formData.get('password')
-    }
-    const validationResult = loginSchema.safeParse(rawData)
-    if(!validationResult.success){
-        return {
-            success: false,
-            errors: 'Vui lòng nhập thông tin đầy đủ',
-            fieldErrors: validationResult.error.flatten().fieldErrors
-        }
-    }
-
-    const { email, password} = validationResult.data
-    const redirectTo = (formData.get('redirectTo') as string ) || '/dashboard'
-
-    const {error} = await supabase.auth.signInWithPassword({
-        email,
-        password
-    })
-    if(error){
-        return {
-            success: false,
-            error: 'Email hoặc mật khẩu không chính xác'
-        }
-    }
-    revalidatePath('/', 'layout')
-    redirect(redirectTo)
-
-}
+    
 
 export async function logout(){
     const supabase = await createClient()
@@ -114,7 +108,7 @@ export async function logout(){
 export async function signInWithGoogle(){
     const supabase = await createClient()
 
-    const origin = process.env.NEXT_PUBLIC_STIE_URL || 'http://localhost:3000'
+    const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 
     const {data, error} = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -129,7 +123,7 @@ export async function signInWithGoogle(){
     if(error){
         return{
             success: false,
-            error: error.message
+            errors: error.message
         }
     }
     if(data.url){
@@ -139,12 +133,12 @@ export async function signInWithGoogle(){
 
 export async function forgetPassword(prevState: ActionState, formData: FormData){
     const supabase = await createClient()
-    const email = formData.get('email') as string
+    const email = formData.get('email')?.toString() || ""
 
     if(!email){
         return {
             success: false,
-            error: 'Vui lòng nhập email',
+            errors: 'Vui lòng nhập email',
             fieldErrors: {email: ['Email không được để trống']}
         }
     }
@@ -156,13 +150,13 @@ export async function forgetPassword(prevState: ActionState, formData: FormData)
     })
     if(error){
         return {
-            sucess: false,
+            success: false,
             errors: error.message
         }
     }
     return {
         success: true,
-        errors: 'Vui lòng kiểm tra hộp thư email của bạn để đặt lại mật khẩu'
+        message: 'Vui lòng kiểm tra hộp thư email của bạn để đặt lại mật khẩu'
     }
 }
 
@@ -176,7 +170,7 @@ export async function updatePassword(prevState: ActionState, formData: FormData)
             success:false,
             errors: 'Mật khẩu phải chứa ít nhất 6 kí tự',
             fieldErrors: {
-                password: ['Mật khấu quá ngắn']
+                password: ['Mật khẩu quá ngắn']
             }
         }
     }
