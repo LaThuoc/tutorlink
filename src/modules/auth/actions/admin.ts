@@ -2,7 +2,7 @@
 
 import { createClient } from "@/src/lib/supabase/server"    
 import { revalidatePath } from "next/cache"
-import { CertificateItem } from "../types/tutor.type"
+import { CertificateItem } from "../../../types/tutor.type"
 import { requireAdminRole } from "@/src/lib/auth/auth-guard"
 
 export async function processFirstTimeProfile(

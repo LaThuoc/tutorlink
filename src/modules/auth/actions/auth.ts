@@ -1,10 +1,10 @@
 'use server'
 
 import { createClient } from "@/src/lib/supabase/server"
-import { signupSchema, loginSchema } from "../validations/auth.schema"
+import { signupSchema, loginSchema } from "../../../validations/auth.schema"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { ActionState } from "../types/auth.type"
+import { ActionState } from "../../../types/auth.type"
 import { createClient as createBasicClient } from "@supabase/supabase-js"
 
 
@@ -15,14 +15,19 @@ export async function signup(prevState: ActionState, formData: FormData): Promis
         email: formData.get('email'),
         password: formData.get('password'),
         fullName: formData.get('full_name'),
+        confirmPassword: formData.get('confirmPassword') || formData.get('password'),
         role: formData.get('role')
     }
 
     const validationResult = signupSchema.safeParse(rawData)
     if(!validationResult.success){
+        const fieldErrors = validationResult.error.flatten().fieldErrors;
+
+        const firstErrorMessage = Object.values(fieldErrors).flat()[0] || 'Vui lòng kiểm tra lại thông tin đăng nhập vào'
+
         return {
             success: false,
-            errors: 'Vui lòng kiểm tra lại thông tin nhập vào',
+            errors: firstErrorMessage,
             fieldErrors: validationResult.error.flatten().fieldErrors,
         }
     }
@@ -105,7 +110,7 @@ export async function logout(){
     redirect('/login')
 }
 
-export async function signInWithGoogle(){
+export async function signInWithGoogle(): Promise< void | ActionState>{
     const supabase = await createClient()
 
     const origin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
@@ -131,7 +136,7 @@ export async function signInWithGoogle(){
     }
 }
 
-export async function forgetPassword(prevState: ActionState, formData: FormData){
+export async function forgetPassword(prevState: ActionState | null, formData: FormData): Promise<ActionState>{
     const supabase = await createClient()
     const email = formData.get('email')?.toString() || ""
 
@@ -156,12 +161,14 @@ export async function forgetPassword(prevState: ActionState, formData: FormData)
     }
     return {
         success: true,
-        message: 'Vui lòng kiểm tra hộp thư email của bạn để đặt lại mật khẩu'
+        message: 'Vui lòng kiểm tra hộp thư email của bạn để đặt lại mật khẩu',
+        errors: undefined,
+        fieldErrors: undefined,
     }
 }
 
 
-export async function updatePassword(prevState: ActionState, formData: FormData): Promise<ActionState | void>{
+export async function updatePassword(prevState: ActionState | null, formData: FormData): Promise<ActionState>{
     const supabase = await createClient()
     const newPassword = formData.get('password') as string
 
@@ -186,4 +193,49 @@ export async function updatePassword(prevState: ActionState, formData: FormData)
     }
     revalidatePath('/', 'layout')
     redirect('/login?reset=success')
+}
+
+
+
+export async function login(
+  prevState: ActionState | null,
+  formData: FormData
+): Promise<ActionState> {
+  const supabase = await createClient()
+
+  const rawData = {
+    email: formData.get('email'),
+    password: formData.get('password'),
+  }
+
+  // 1. Validate với Zod Schema
+  const validationResult = loginSchema.safeParse(rawData)
+  if (!validationResult.success) {
+    const fieldErrors = validationResult.error.flatten().fieldErrors
+    const firstErrorMessage =
+      Object.values(fieldErrors).flat()[0] || 'Vui lòng kiểm tra lại thông tin đăng nhập'
+
+    return {
+      success: false,
+      errors: firstErrorMessage,
+      fieldErrors: fieldErrors,
+    }
+  }
+
+  const { email, password } = validationResult.data
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
+
+  if (error) {
+    return {
+      success: false,
+      errors: 'Email hoặc mật khẩu không chính xác. Vui lòng thử lại.',
+    }
+  }
+
+  revalidatePath('/', 'layout')
+  redirect('/')
 }
