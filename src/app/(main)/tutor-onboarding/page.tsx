@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { Faq, type FaqItem } from "../../components/tutor-onboarding/Faq";
-import { TutorHero } from "../../components/tutor-onboarding/TutorHero";
+import { Faq, type FaqItem } from "../../_components/tutor-onboarding/Faq";
+import { TutorHero } from "../../_components/tutor-onboarding/TutorHero";
 import {
   TutorBenefits,
   TutorDashboardPreview,
   TutorFinalCta,
   TutorProfilePreview,
   TutorSteps,
-} from "../../components/tutor-onboarding/TutorSection";
+} from "../../_components/tutor-onboarding/TutorSection";
 export const metadata: Metadata = {
   title: "Dành cho gia sư | GiaSuHub",
   description: "Tạo hồ sơ gia sư miễn phí, tự đặt học phí và nhận yêu cầu học từ học viên trên GiaSuHub.",

@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/src/lib/supabase/client';
-import { TutorCard } from '@/src/app/components/tutors/TutorCard';
+import { TutorCard } from '@/src/app/_components/tutors/TutorCard';
 import type { TutorCardData } from '@/src/types/tutor.type';
 import { Heart, ArrowLeft, Loader2, BookOpen } from 'lucide-react';
-
+import { StudentBreadcrumb } from '@/src/app/_components/layout/returnHome';
+import { SavedTutorRow } from '@/src/types/tutor.type';
 export default function SavedTutorsPage() {
   const supabase = createClient();
   const [savedTutors, setSavedTutors] = useState<TutorCardData[]>([]);
@@ -15,39 +16,74 @@ export default function SavedTutorsPage() {
   useEffect(() => {
     async function fetchSavedTutors() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setLoading(false)
+        return
+      };
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('saved_tutors')
         .select(`
-          tutor:tutor_id (
-            user_id,
-            name:full_name,
-            avatar:avatar_url,
-            headline,
-            subjects,
-            grades,
-            hourly_rate,
-            address:district,
-            is_online,
-            experience_years,
-            rating_avg,
-            rating_count
+          tutor_id,
+          tutor_user:profiles!saved_tutors_tutor_id_fkey (
+            full_name,
+            avatar_url,
+            district,
+            tutor_profile:tutor_profiles!tutor_profiles_user_id_fkey (
+              headline,
+              subjects,
+              grades,
+              hourly_rate,
+              address,
+              is_online,
+              experience_years
+            ), 
+            reviews: reviews!reviews_tutor_id_fkey(
+              rating
+            )
           )
         `)
         .eq('student_id', user.id);
+      if (error) {
+        console.error('Lỗi khi lấy danh sách gia sư đã lưu:', error);
+      }
 
-      if (data) {
-        const tutors = data
-          .map((item) => item.tutor)
-          .filter(Boolean) as unknown as TutorCardData[];
-        setSavedTutors(tutors);
+       if (data) {
+        const formattedTutors: TutorCardData[] = (data as unknown as SavedTutorRow[])
+          .reduce<TutorCardData[]>((acc, item) => {
+            const u = item.tutor_user;
+            if (!u) return acc;
+
+            const tp = Array.isArray(u.tutor_profile) ? u.tutor_profile[0] : u.tutor_profile;
+
+            const reviews = u.reviews || [];
+            const ratingCount = reviews.length;
+            const ratingSum = reviews.reduce((sum, r) => sum + (r.rating || 0), 0);
+            const ratingAvg = ratingCount > 0 ? Number((ratingSum / ratingCount).toFixed(1)) : 0;
+
+            acc.push({
+            user_id: item.tutor_id,
+            name: u.full_name || 'Gia sư',
+            avatar: u.avatar_url || null,
+            headline: tp?.headline || '',
+            subjects: tp?.subjects || [],
+            grades: tp?.grades || [],
+            hourly_rate: Number(tp?.hourly_rate) || 0,
+            address: u.district || tp?.address || 'Chưa cập nhật',
+            is_online: tp?.is_online ?? true,
+            experience_years: tp?.experience_years || 0,
+            rating_avg: ratingAvg,
+            rating_count: ratingCount,
+            });
+            return acc;
+          }, [])
+        setSavedTutors(formattedTutors);
       }
       setLoading(false);
     }
 
     fetchSavedTutors();
-  }, []);
+  }, [supabase]);
 
   if (loading) {
     return (
@@ -60,6 +96,7 @@ export default function SavedTutorsPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 pb-20 pt-6">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+        <StudentBreadcrumb current="Gia sư đã lưu"/>
         
         {/* HEADER */}
         <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

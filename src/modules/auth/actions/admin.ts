@@ -57,9 +57,10 @@ export async function processNewCertificateRequest(
     action: 'Approve' | 'Reject',
     rejectionReason: string
 ){
-    const {supabase} = await requireAdminRole()
+    try{
+        const {supabase} = await requireAdminRole()
 
-    if(action === 'Approve'){
+    
 
         const {data: certReq, error: reqFetchError} = await supabase 
             .from('certificate_requests')
@@ -73,24 +74,20 @@ export async function processNewCertificateRequest(
             }
         }
 
-
-        const {data: tutor, error: fetchError} = await supabase.from('tutor_profiles')
-            .select('certificates_data')
-            .eq('user_id', tutorId)
-            .single()
-        if(fetchError){
-            return {
-                success: false,
-                errors: fetchError.message
+        if(action === 'Approve'){
+            const {data: tutor, error: fetchError} = await supabase.from('tutor_profiles')
+                .select('certificates_data')
+                .eq('user_id', tutorId)
+                .single()
+            if(fetchError){
+                return {
+                    success: false,
+                    errors: fetchError.message
+                }
             }
-        }
+            const currentCertificates = ((tutor.certificates_data as unknown ) as CertificateItem[]) || []
 
-        const currentCertificates = ((tutor?.certificates_data as unknown ) as CertificateItem[]) || []
-
-        const isExist = currentCertificates.some(c => c.imageUrl === certReq.certificate_url)
-
-        if(!isExist){
-            const newCertificateItem: CertificateItem = {
+            const approvedCertItem: CertificateItem = {
                 id: certReq.id,
                 title: certReq.title || 'Bằng cấp / Chứng chỉ',
                 issuedBy: certReq.issued_by || 'Chưa cập nhật',
@@ -100,54 +97,48 @@ export async function processNewCertificateRequest(
                 isVerified: true
 
             }
+
+            const updatedCertificates = [...currentCertificates, approvedCertItem];
             const {error: updateTutorError} = await supabase.from('tutor_profiles')
                 .update({
-                    certificates_data: [...currentCertificates, newCertificateItem] as unknown
+                    certificates_data: updatedCertificates as unknown,
+                    updated_at: new Date().toISOString(),
                 })
                 .eq('user_id', tutorId)
 
             if(updateTutorError){
                 return {
                     success: false,
-                    errors: updateTutorError.message
-                }
-            }
+                    errors: `Lỗi cập nhật hồ sơ: ${updateTutorError.message}`
+            }}
+            await supabase
+                .from('certificate_requests')
+                .update({ status: 'Approved', rejection_reason: null })
+                .eq('id', requestId);
         }else{
-            return {
-                success: false,
-                errors: 'Chứng chỉ này đã tồn tại trong hồ sơ.'
-            }
+            await supabase.from('certificate_requests')
+                .update({
+                    status: 'Rejected', 
+                    rejection_reason:rejectionReason || 'Ảnh minh chứng không hợp lệ'
+                })
+                .eq('id', requestId)
         }
-        const {error: updateRequestError} = await supabase.from('certificate_requests')
-            .update({
-                status: 'Approved', rejection_reason: null
-            })
-            .eq('id', requestId)
-        if(updateRequestError){
-            return {
-                success:false,
-                errors: updateRequestError.message
-            }
+        
+    
+        revalidatePath('/admin/certificates')
+        revalidatePath(`/tutors/${tutorId}`)
+        revalidatePath('/dashboard/profiletutor')
+        revalidatePath('/dashboard/profile');
+        return {
+            success: true,
+            message: action === 'Approve' ? 'Đã duyệt và công khai chứng chỉ!' : 'Đã từ chối yêu cầu.',
         }
-    }else{
-        const {error: updateRequestError} = await supabase.from('certificate_requests')
-            .update({
-                status: 'Rejected', 
-                rejection_reason: rejectionReason || 'Ảnh chứng chỉ không hợp lệ'
-            })
-            .eq('id', requestId)
-        if(updateRequestError){
-            return {
-                success:false,
-                errors: updateRequestError.message
-            }
-        }
-    }
-    revalidatePath('/admin/certificates')
-    revalidatePath(`/tutors/${tutorId}`)
-    revalidatePath('/dashboard/profile')
-    return {
-        success: true
+    }catch (err: unknown) {
+        return { 
+            success: false, 
+            // Ép kiểu trực tiếp về Class 'Error' của hệ thống thay vì dùng 'any'
+            errors: (err as Error).message || 'Lỗi server khi xử lý yêu cầu' 
+        };
     }
 }
 

@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache"
 import { TutorActionState, ExperienceItem, EducationItem, CertificateItem, ScheduleSlot } from "../../types/tutor.type"
 import { requireTutorRole } from "@/src/lib/auth/auth-guard"
-import { updateTutorProfileSchema } from "../../validations/tutor.schema"
-
-export async function updateTutorProfile(prevState: TutorActionState, formData: FormData): Promise<TutorActionState | void>{
+import { educationItemSchema, updateTutorProfileSchema, 
+    certificateItemSchema, experienceItemSchema, Section3Schema, PersonalInfoSchema } from "../../validations/tutor.schema"
+import { SubjectDetailItem } from "../../types/tutor.type"
+import {z} from "zod"
+export async function updateTutorProfile(prevState: TutorActionState | null | undefined, formData: FormData): Promise<TutorActionState>{
     const { user, supabase } = await requireTutorRole()
 
 
@@ -18,10 +20,25 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
     const parseJsonField = <T>(fieldName: string): T[] => {
         const raw = formData.get(fieldName) as string 
         try{
-            return raw ? JSON.parse(raw) : []
+            return raw ? (JSON.parse(raw) as T[]) : []
         }catch{
             return []
         }
+    }
+    const parseStringArray = (fieldName: string): string[] => {
+        const values = (formData.getAll(fieldName) as string[]).filter(Boolean)
+        return values.flatMap((v) => {
+            const s = String(v).trim()
+            if (s.startsWith('[')) {
+                try {
+                    const arr = JSON.parse(s)
+                    return Array.isArray(arr) ? arr.map(String).filter(Boolean) : [s]
+                } catch {
+                    return [s]
+                }
+            }
+            return [s]
+        })
     }
 
     const rawData = {
@@ -34,27 +51,31 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
         province: formData.get('province') as string,
         district: formData.get('district') as string,
         address: formData.get('address') as string,
-        hometown: formData.get('hometown') as string,
+        headline: (formData.get('headline') as string) || '', // Bổ sung headline
+        // hometown: formData.get('hometown') as string,
         bio: formData.get('bio') as string,
         quote: formData.get('quote') as string,
-        subjects: (formData.getAll('subjects') as string[]).filter(Boolean), 
-        grades: (formData.getAll('grades') as string[]).filter(Boolean),
+        subjects: parseStringArray('subjects'),
+        grades: parseStringArray('grades'),
         hourlyRate: Number(formData.get('hourlyRate')),
-        teachingAreas: (formData.getAll('teachingAreas') as string[]).filter(Boolean),
-        achievements: (formData.getAll('achievements') as string[]).filter(Boolean),
-        skills: (formData.getAll('skills') as string[]).filter(Boolean),
+        teachingAreas: parseStringArray('teachingAreas'),
+        achievements: parseStringArray('achievements'),
+        skills: parseStringArray('skills'),
         experiences: parseJsonField<ExperienceItem>('experiences'),
         educations: parseJsonField<EducationItem>('educations'),
         schedulesData: parseJsonField<ScheduleSlot>('schedulesData'),
         certificates: parseJsonField<CertificateItem>('certificates'),
-        schedules: (formData.getAll('schedules') as string[]).filter(Boolean),
+        schedules: parseStringArray('schedules'),
         schoolName: formData.get('schoolName') as string,
-        teachingModes: (formData.getAll('teachingModes') as string[]).filter(Boolean)
+        teachingModes: parseStringArray('teachingModes'),
+        subjectDetails: parseJsonField<SubjectDetailItem>('subjectDetails'),
+
     }
 
     const validationResult = updateTutorProfileSchema.safeParse(rawData)
 
     if(!validationResult.success){
+        console.log("Lỗi validatation chi tiết:", validationResult.error.flatten().fieldErrors )
         return {
             success: false,
             errors: 'Vui lòng kiểm tra lại thông tin',
@@ -64,7 +85,7 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
 
 
     const data = validationResult.data
-    const isNewTutor = !currentTutor
+    const isNewTutor = !currentTutor || currentTutor.verification_status === 'Draft'
     const isAlreadyApproved = currentTutor?.verification_status === 'Approved'
 
     let finalCertificates: CertificateItem[] = []
@@ -92,7 +113,8 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
         province,
         district,
         address,
-        hometown,
+        // hometown,
+        headline, // Destructure headline
         bio,
         quote,
         education,
@@ -110,6 +132,8 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
         teachingModes
     } = validationResult.data
 
+    const subjectDetails = rawData.subjectDetails
+
     const {error: profileError} = await supabase
         .from('profiles')
         .update({
@@ -121,7 +145,7 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
             province,
             district,
             address,
-            hometown: hometown || null,
+            // hometown: hometown || null,
             updated_at: new Date().toISOString()
         })
         .eq('id', user.id)
@@ -135,6 +159,7 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
 
     const {error: tutorError} = await supabase.from('tutor_profiles').upsert({
         user_id: user.id,
+        headline, // Đã thêm vào đây
         bio,
         quote,
         education,
@@ -142,6 +167,7 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
         teaching_modes: teachingModes,
         subjects: subjects,
         grades: grades,
+        subject_details: subjectDetails as unknown,
         hourly_rate: hourlyRate,
         teaching_areas: teachingAreas,
         achievements,
@@ -153,8 +179,9 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
         schedules,
         verification_status: targetStatus,
         is_verified: isAlreadyApproved ? true : false,
+        is_completed: true,
         updated_at: new Date().toISOString()
-    })
+    }, {onConflict: 'user_id'})
 
     if(tutorError){
         return {
@@ -180,8 +207,16 @@ export async function updateTutorProfile(prevState: TutorActionState, formData: 
     revalidatePath('/dashboard/profile')
     revalidatePath('/tutors')
     revalidatePath(`/tutors/${user.id}`)
-    return {success: true}
+    return {
+        success: true,
+        isCompleted: true,
+        message: 'Cập nhật hồ sơ gia sư thành công'
+    }
 }
+
+
+
+
 
 export async function updateTutorSchedules(prevState: TutorActionState, formData: FormData): Promise<TutorActionState | void>{
     const { user, supabase } = await requireTutorRole()
@@ -202,38 +237,61 @@ export async function updateTutorSchedules(prevState: TutorActionState, formData
 }
 
 
-export async function submitNewVerification(certificate: CertificateItem): Promise<TutorActionState | void>{
-    const { user, supabase } = await requireTutorRole()
-    if(!certificate.imageUrl){
-        return {
-            success: false,
-            errors: 'Đường dẫn chứng chỉ không được để trống'
+export async function updateTutorCertificates(certificates: CertificateItem[]): Promise<TutorActionState>{
+    try{
+        const { user, supabase } = await requireTutorRole()
+        const parsed = z.array(certificateItemSchema).safeParse(certificates);
+        if (!parsed.success) {
+            return { success: false, errors: parsed.error.issues[0]?.message || 'Dữ liệu chứng chỉ không hợp lệ' };
         }
-    }
-    const {error} = await supabase.from('certificate_requests').insert({
-        tutor_id: user.id,
-        certificate_url: certificate.imageUrl,
-        title: certificate.title,
-        issued_by: certificate.issuedBy,
-        issue_year: certificate.issuedYear,
-        detail: certificate.detail,
-        status: 'Pending'
-    })
-    if(error){
-        return {
-            success: false,
-            errors: error.message
-        }
-    }
+        
+        const validCerts = parsed.data;
+        const { data: existingRequests } = await supabase
+            .from('certificate_requests')
+            .select('certificate_url')
+            .eq('tutor_id', user.id);
 
-    revalidatePath('/dashboard/profile')
-    revalidatePath('/admin/certificates')
-    
-    return {success: true}
+        const existingUrls = new Set((existingRequests || []).map((r) => r.certificate_url));
+
+
+        const newRequestsToInsert = validCerts
+            .filter((cert) => cert.imageUrl && !existingUrls.has(cert.imageUrl))
+            .map((cert) => ({
+                tutor_id: user.id,
+                certificate_url: cert.imageUrl,
+                title: cert.title,
+                issued_by: cert.issuedBy,
+                issue_year: cert.issuedYear,
+                detail: cert.detail || null,
+                status: 'Pending',
+        }));
+        if (newRequestsToInsert.length === 0) {
+            return { success: true, message: 'Không có chứng chỉ mới nào cần gửi xét duyệt.' };
+        }
+
+        const {error: insertError} = await supabase.from('certificate_requests').insert(newRequestsToInsert)
+        if(insertError){
+            return {
+                success: false,
+                errors: `Lỗi gửi yêu cầu xét duyệt: ${insertError.message}`
+            }
+        }
+
+        revalidatePath('/dashboard/profiletutor')
+        revalidatePath('/admin/certificates')
+        
+        return {success: true, message: 'Gửi yêu cầu xét duyệt chứng chỉ thành công! Vui lòng chờ Admin phê duyệt.',}
+    }catch (err: unknown) {
+        return { 
+            success: false, 
+            // Ép kiểu trực tiếp về 'Error' của hệ thống thay vì dùng 'any'
+            errors: (err as Error).message || 'Lỗi server khi gửi chứng chỉ' 
+        };
+    }
 }
 
 
-export async function removeCertificates(certificatesIds: string[]): Promise<TutorActionState| void>{
+export async function removeCertificates(certificatesIds: string[]): Promise<TutorActionState>{
     const { user, supabase } = await requireTutorRole()
     if(!certificatesIds || certificatesIds.length === 0){
         return {
@@ -278,43 +336,156 @@ export async function removeCertificates(certificatesIds: string[]): Promise<Tut
     return { success: true }
 }
 
-export async function updateTutorExperience(experiences: ExperienceItem[]): Promise<TutorActionState>{
-    const { user, supabase } = await requireTutorRole()
+export async function updateTutorExperienceAndSkills(payload: {
+    experiences: ExperienceItem[],
+    achievements:  string[],
+    skills: string[];
+}): Promise<TutorActionState>{
+    try{
+        const { user, supabase } = await requireTutorRole()
+        const parsed = Section3Schema.safeParse(payload)
 
-    const {error} = await supabase.from('tutor_profiles').update({
-        experiences: experiences as unknown,
-        updated_at: new Date().toISOString()
-    }).eq('user_id', user.id)
-    if(error){
-        return {
-            success:false,
-            errors: `Không thể cập nhật kinh nghiệm ${error.message}`
+        if (!parsed.success) {
+            return { success: false, errors: parsed.error.issues[0]?.message || 'Dữ liệu kinh nghiệm/thành tích không hợp lệ' };
         }
-    }
-    revalidatePath('/dashboard/profile')
-    revalidatePath(`/tutors/${user.id}`)
+        const {error} = await supabase.from('tutor_profiles').update({
+            achievements: parsed.data.achievements,
+            skills: parsed.data.skills,
+            experiences: parsed.data.experiences as unknown,
+            updated_at: new Date().toISOString()
+        }).eq('user_id', user.id)
+        if(error){
+            return {
+                success:false,
+                errors: `Không thể cập nhật Kinh nghiệm & Thành tích ${error.message}`
+            }
+        }
+        revalidatePath('/dashboard/profiletutor');
+        revalidatePath('/dashboard/profile')
+        revalidatePath(`/tutors/${user.id}`)
 
-    return { success: true }
+        return { success: true }
+    }catch (err: unknown) {
+        return { 
+            success: false, 
+            errors: (err as Error).message || 'Lỗi server khi cập nhật Kinh nghiệm & Thành tích' 
+        }; 
+    }
 }
 
+export async function updateTutorPersonalInfo(payload: {
+  fullName: string;
+  dateOfBirth: string;
+  gender: string;
+  phone: string;
+  province: string;
+  district: string;
+  address: string;
+  schoolName: string;
+  education: string;
+  hourlyRate: number | '';
+  headline: string;
+  bio: string;
+  quote: string;
+  subjectDetails: SubjectDetailItem[];
+  teachingAreas: string[];
+  teachingModes: string[];
+}): Promise<TutorActionState> {
+  try {
+    const { user, supabase } = await requireTutorRole();
 
-export async function UpdateTutorEducations(educations: EducationItem[]): Promise<TutorActionState | void>{
-    const { user, supabase } = await requireTutorRole()
-    const {error} = await supabase.from('tutor_profiles').update({
-        educations: educations as unknown,
-        updated_at: new Date().toISOString()
-    }).eq('user_id', user.id)
-    if(error){
-        return {
-            success:false,
-            errors: `Không thể cập nhật học vấn: ${error.message}`
-        }
+    // 🛡️ Validate
+    const parsed = PersonalInfoSchema.safeParse(payload);
+    if (!parsed.success) {
+      return { success: false, errors: parsed.error.issues[0]?.message || 'Thông tin cá nhân không hợp lệ' };
     }
 
-    revalidatePath('/dashboard/profile')
-    revalidatePath(`/tutors/${user.id}`)
+    const data = parsed.data;
 
-    return { success: true }
+    const derivedSubjects = Array.from(new Set(data.subjectDetails.map((sd) => sd.subject)));
+    const derivedGrades = Array.from(new Set(data.subjectDetails.flatMap((sd) => sd.grades || [])));
+
+    await supabase
+      .from('profiles')
+      .update({
+        full_name: data.fullName,
+        phone: data.phone,
+        gender: data.gender,
+        date_of_birth: data.dateOfBirth,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id);
+
+    const { error: profileError } = await supabase
+      .from('tutor_profiles')
+      .update({
+        school_name: data.schoolName,
+        education: data.education,
+        hourly_rate: data.hourlyRate === '' ? 0 : data.hourlyRate,
+        headline: data.headline || '',
+        bio: data.bio || '',
+        quote: data.quote || '',
+        address: data.address || '',
+        subject_details: data.subjectDetails as unknown,
+        subjects: derivedSubjects,
+        grades: derivedGrades,
+        teaching_areas: data.teachingAreas,
+        teaching_modes: data.teachingModes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', user.id);
+
+    if (profileError) {
+      return { success: false, errors: `Không thể cập nhật hồ sơ: ${profileError.message}` };
+    }
+
+    revalidatePath('/dashboard/profiletutor');
+    revalidatePath('/dashboard/profile');
+    revalidatePath(`/tutors/${user.id}`);
+    return { success: true, message: 'Cập nhật thông tin cá nhân & giảng dạy thành công!' };
+  }catch (err: unknown) {
+    return { 
+        success: false, 
+        errors: (err as Error).message || 'Lỗi server khi cập nhật thông tin cá nhân' 
+    };
+    }
+}
+
+export async function updateTutorEducations(educations: EducationItem[]): Promise<TutorActionState>{
+    try{
+        const { user, supabase } = await requireTutorRole()
+
+        const parsed = z.array(educationItemSchema).safeParse(educations)
+        if(!parsed.success){
+            return {
+                success: false,
+                errors: parsed.error.issues[0]?.message || 'Dữ liệu học vấn không hợp lệ',
+            }
+        }
+        const {error} = await supabase.from('tutor_profiles').update({
+            educations: parsed.data as unknown,
+            updated_at: new Date().toISOString()
+        }).eq('user_id', user.id)
+        if(error){
+            return {
+                success:false,
+                errors: `Không thể cập nhật học vấn: ${error.message}`
+            }
+        }
+
+        revalidatePath('/dashboard/profile')
+        revalidatePath('/dashboard/profiletutor');
+        revalidatePath(`/tutors/${user.id}`)
+
+        return { success: true }
+    }catch(err: unknown){
+        const errorMessage = err instanceof Error ? err.message : 'Lỗi server khi cập nhật học vấn';
+
+        return { 
+            success: false, 
+            errors: errorMessage 
+        }; 
+    }
 }
 
 
@@ -353,7 +524,7 @@ export async function updateBookingStatus(requestId: string, tutorId: string, ac
 }
 
 
-export async function compleBookingRequest(requestId: string, tutorId: string){
+export async function completeBookingRequest(requestId: string, tutorId: string){
     const { user, supabase } = await requireTutorRole()
     const {data: bookingReq} = await supabase.from('booking_requests')
         .select('status')

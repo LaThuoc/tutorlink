@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { createClient } from '@/src/lib/supabase/client';
 import { Lock, Bell, Shield, Save, Loader2, CheckCircle2 } from 'lucide-react';
+import { StudentBreadcrumb } from '@/src/app/_components/layout/returnHome';
 
 export default function StudentSettingsPage() {
   const supabase = createClient();
@@ -37,7 +38,7 @@ export default function StudentSettingsPage() {
   return (
     <div className="min-h-screen bg-slate-50/50 pb-20 pt-6">
       <div className="mx-auto max-w-3xl px-4 sm:px-6">
-        
+        <StudentBreadcrumb current='Settings' />
         <div className="mb-8">
           <h1 className="text-3xl font-extrabold text-slate-900">Cài đặt & Bảo mật</h1>
           <p className="mt-1 text-xs text-slate-500">Quản lý mật khẩu tài khoản và tùy chọn thông báo từ hệ thống.</p>

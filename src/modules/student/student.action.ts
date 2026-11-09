@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache"
 import { createBookingRequestSchema } from "../../validations/booking.schema"
 import { ScheduleSlot, TutorActionState } from "../../types/tutor.type"
 import { requireAuth } from "@/src/lib/auth/auth-guard"
-
-export async function createBookingRequest(prevState: TutorActionState, formData:FormData): Promise<TutorActionState | void>{
+import { ExistingRequestStatus } from "../../types/tutor.type"
+export async function createBookingRequest(prevState: TutorActionState | void, formData:FormData): Promise<TutorActionState>{
     const { user, supabase } = await requireAuth()
 
     const rawData = {
@@ -59,7 +59,7 @@ export async function createBookingRequest(prevState: TutorActionState, formData
 
 
 export async function cancelBookingRequest(bookingId: string) {
-    const { user, supabase } = await requireAuth()
+   try { const { user, supabase } = await requireAuth()
 
     const {data: booking, error: fetchError} = await supabase.from('booking_requests')
         .select('tutor_id, schedule_slot_id, student_id, status')
@@ -80,26 +80,81 @@ export async function cancelBookingRequest(bookingId: string) {
         }
     }
 
-    const {data: tutor } = await supabase.from('tutor_profiles')
-        .select('schedules_data')
-        .eq('tutor_id', booking.tutor_id)
-        .single()
 
-    if(tutor && tutor.schedules_data){
-        const currentSlots = tutor.schedules_data as ScheduleSlot[]
-
-        const updatedSlots = currentSlots.map((slot) => {
-            if(slot.id === booking.schedule_slot_id){
-                return {...slot, isAvailable: true}
+    if(booking.schedule_slot_id && booking.tutor_id){
+        try{
+            const {data: tutor } = await supabase.from('tutor_profiles')
+                .select('schedules_data')
+                .eq('user_id', booking.tutor_id)
+                .single()
+            if(tutor && Array.isArray(tutor.schedules_data)){
+                const rawSchedules = tutor.schedules_data as ScheduleSlot[]
+                const targetSlotId = booking.schedule_slot_id;
+                const updatedSchedules = rawSchedules.map((slot) => {
+                    const isIdMatched = slot.id && targetSlotId.includes(slot.id);
+                    const isTimeMatched = slot.startTime && targetSlotId.includes(slot.startTime);
+                    if (isIdMatched || isTimeMatched) {
+                    return { ...slot, isAvailable: true };
+                    }
+                    return slot;
+                })
+                await supabase
+                    .from('tutor_profiles')
+                    .update({schedules_data: updatedSchedules})
+                    .eq('user_id', booking.tutor_id)
+                    
             }
-            return slot
-        })
-        await supabase.from('tutor_profiles').update({schedules_data: updatedSlots}).eq('user_id', booking.tutor_id)
+            
+        }catch(slotErr){
+            console.error('Lỗi khi khôi phục slot lịch (vẫn tiệp tục hủy đơn):', slotErr)
+        }
+    }
+
+
+
+    const { error: deleteError } = await supabase
+      .from('booking_requests')
+      .delete()
+      .eq('id', bookingId)
+      .eq('student_id', user.id);
+
+    if (deleteError) {
+      return { success: false, errors: `Lỗi khi xóa yêu cầu: ${deleteError.message}` };
     }
 
     revalidatePath('/dashboard/student/requests')
     revalidatePath(`/tutors/${booking.tutor_id}`)
 
     return {success: true}
-
+   }catch (err: unknown){
+        const message = err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định';
+        return { success: false, errors: message };
+   }
 }
+
+
+
+export async function getExistingBookingRequest(tutorUserId: string): Promise<ExistingRequestStatus> {
+    try{
+        const {user, supabase} = await requireAuth()
+        if(!user) return null
+        const {data, error} = await supabase.from('booking_requests')
+            .select('id, status, rejection_reason, subject, contact_phone')
+            .eq('student_id', user.id)
+            .eq('tutor_id', tutorUserId)
+            .in('status', ['Pending', 'Accepted', 'Rejected'])
+            .order('created_at', {ascending: false})
+            .limit(1)
+            .maybeSingle()
+        if(error || !data) return null
+
+        return {
+            id: data.id,
+            status: data.status,
+            rejectionReason: data.rejection_reason,
+            subject: data.subject,
+            contactPhone: data.contact_phone
+        }
+    }catch{return null}
+}
+

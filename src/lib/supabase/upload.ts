@@ -1,32 +1,36 @@
 import { createClient } from '@/src/lib/supabase/client'
 
-export async function uploadImageToSupabase(
+export async function uploadCertificateImage(
   file: File, 
-  bucket: 'avatars' | 'certificates', 
-  folderPath: string
-) {
-  const supabase = createClient()
+  userId: string
+): Promise<string | null> {
+  try{
+    const supabase = createClient()
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${userId}/${Date.now()}.${fileExt}`
+    const filePath = `${fileName}`
 
-  // Tạo tên file ngẫu nhiên để tránh trùng tên (ví dụ: user_123/1718000000.png)
-  const fileExt = file.name.split('.').pop()
-  const fileName = `${folderPath}/${Date.now()}.${fileExt}`
+    // 1. Upload file lên Storage Bucket
+    const { error: uploadError } = await supabase.storage
+      .from('cerifications')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true
+      })
 
-  // 1. Upload file lên Storage Bucket
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .upload(fileName, file, {
-      cacheControl: '3600',
-      upsert: true
-    })
+    if (uploadError) {
+      console.error('Lỗi khi upload ảnh chứng chỉ:', uploadError.message)
+      return null
+    }
 
-  if (error) {
-    throw new Error(`Lỗi tải ảnh lên Supabase: ${error.message}`)
+    // 2. Lấy đường dẫn URL công khai của ảnh
+    const { data} = supabase.storage
+      .from('cerifications')
+      .getPublicUrl(filePath)
+
+    return data.publicUrl
+  }catch(err){
+    console.error('Lỗi hệ thống khi tải ảnh:', err)
+    return null
   }
-
-  // 2. Lấy đường dẫn URL công khai của ảnh
-  const { data: publicUrlData } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(data.path)
-
-  return publicUrlData.publicUrl
 }

@@ -16,12 +16,14 @@ export default function RegisterPage() {
   const [role, setRole] = useState<"student" | "tutor">("student");
   const [showPassword, setShowPassword] = useState(false);
 
+  // Hook xử lý Server Action
   const [state, formAction, isPending] = useActionState(signup, initialState);
 
   return (
     <div className="min-h-screen w-full bg-slate-50 flex items-center justify-center p-4 sm:p-6 lg:p-8">
       <div className="w-full max-w-md bg-white rounded-3xl border border-slate-200/80 shadow-xl shadow-slate-200/50 p-6 sm:p-8 space-y-6">
         
+        {/* LOGO & TIÊU ĐỀ */}
         <div className="text-center space-y-2">
           <Link href="/" className="inline-flex items-center gap-2 text-2xl font-extrabold text-blue-700">
             <GraduationCap className="size-8 text-blue-600" aria-hidden="true" />
@@ -35,6 +37,7 @@ export default function RegisterPage() {
           </p>
         </div>
 
+        {/* CHỌN VAI TRÒ TÀI KHOẢN */}
         <div className="grid grid-cols-2 gap-3 p-1 bg-slate-100 rounded-2xl">
           <button
             type="button"
@@ -62,6 +65,7 @@ export default function RegisterPage() {
           </button>
         </div>
 
+        {/* HIỂN THỊ THÔNG BÁO LỖI TỔNG QUÁT */}
         {state?.errors && typeof state.errors === 'string' && (
           <div className="flex items-center gap-2.5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold animate-in fade-in slide-in-from-top-1">
             <AlertCircle className="size-4 shrink-0" />
@@ -69,9 +73,11 @@ export default function RegisterPage() {
           </div>
         )}
 
+        {/* FORM ĐĂNG KÝ */}
         <form action={formAction} noValidate className="space-y-4">
           <input type="hidden" name="role" value={role} />
 
+          {/* HỌ VÀ TÊN */}
           <div className="space-y-1.5">
             <label htmlFor="full_name" className="block text-xs font-bold uppercase tracking-wider text-slate-700">
               Họ và tên
@@ -90,6 +96,7 @@ export default function RegisterPage() {
                 }`}
               />
             </div>
+            {/* Lỗi chi tiết Họ và tên */}
             {state?.fieldErrors?.fullName && (
               <p className="text-xs font-medium text-rose-600 pl-1">
                 {state.fieldErrors.fullName[0]}
@@ -97,6 +104,7 @@ export default function RegisterPage() {
             )}
           </div>
 
+          {/* EMAIL */}
           <div className="space-y-1.5">
             <label htmlFor="email" className="block text-xs font-bold uppercase tracking-wider text-slate-700">
               Email
@@ -115,6 +123,7 @@ export default function RegisterPage() {
                 }`}
               />
             </div>
+            {/* Lỗi chi tiết Email */}
             {state?.fieldErrors?.email && (
               <p className="text-xs font-medium text-rose-600 pl-1">
                 {state.fieldErrors.email[0]}
@@ -122,6 +131,7 @@ export default function RegisterPage() {
             )}
           </div>
 
+          {/* MẬT KHẨU */}
           <div className="space-y-1.5">
             <label htmlFor="password" className="block text-xs font-bold uppercase tracking-wider text-slate-700">
               Mật khẩu
@@ -147,6 +157,7 @@ export default function RegisterPage() {
                 {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
               </button>
             </div>
+            {/* Lỗi chi tiết Mật khẩu */}
             {state?.fieldErrors?.password && (
               <p className="text-xs font-medium text-rose-600 pl-1">
                 {state.fieldErrors.password[0]}
@@ -154,6 +165,7 @@ export default function RegisterPage() {
             )}
           </div>
 
+          {/* NÚT ĐĂNG KÝ */}
           <button
             type="submit"
             disabled={isPending}
@@ -164,6 +176,7 @@ export default function RegisterPage() {
           </button>
         </form>
 
+        {/* ĐƯỜNG DẪN ĐĂNG NHẬP */}
         <div className="text-center text-sm text-slate-600 pt-2 border-t border-slate-100">
           Đã có tài khoản?{" "}
           <Link href="/login" className="font-bold text-blue-600 hover:underline">

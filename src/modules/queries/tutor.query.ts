@@ -70,7 +70,7 @@ export async function getTutors(filters: TutorFilters, pageSize = PAGE_SIZE) {
     .select(COLUMNS, { count: "exact" })
     .eq("verification_status", "Approved");
 
-  const q = filters.q ? safe(filters.q) : "";
+  const q = filters.q ? safe(filters.q) : ""; 
   if (q) {
     const { data: byName } = await supabase
       .from("profiles")
@@ -180,9 +180,6 @@ export async function getTutors(filters: TutorFilters, pageSize = PAGE_SIZE) {
     failed: !!error,
   };
 }
-
-
-
 
 
 

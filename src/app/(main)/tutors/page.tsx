@@ -4,10 +4,10 @@ import { ChevronDown, Mail, Search, SearchX, X } from "lucide-react";
 import { GRADES, SUBJECTS } from "@/src/lib/constants/constants";
 import { PAGE_SIZE, filtersToQuery, getTutors, parseFilters } from "@/src/modules/queries/tutor.query";
 import { TutorFilters } from "@/src/types/tutor.type";
-import { Pagination } from "../../components/tutors/Pagination";
-import { SortSelect } from "../../components/tutors/Sort-Select";
-import { FiltersSidebar } from "../../components/tutors/FiltersSidebar";
-import { TutorCard } from "../../components/tutors/TutorCard";
+import { Pagination } from "../../_components/tutors/Pagination";
+import { SortSelect } from "../../_components/tutors/Sort-Select";
+import { FiltersSidebar } from "../../_components/tutors/FiltersSidebar";
+import { TutorCard } from "../../_components/tutors/TutorCard";
 
 export const metadata: Metadata = {
   title: "Tìm gia sư | GiaSuHub",
