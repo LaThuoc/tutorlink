@@ -73,27 +73,41 @@ export async function signup(prevState: ActionState, formData: FormData): Promis
             errors: error.message
         }
     }
-    if(authData.user && role === 'tutor'){
-        const {error: tutorError} = await supabase.from('tutor_profiles')
+    if(authData.user){
+        const supabaseAdmin = createBasicClient(
+                    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                    process.env.SUPABASE_SERVICE_ROLE_KEY!)
+
+        const {error: profileError} = await supabaseAdmin.from('profiles')
+            .upsert({
+                id: authData.user.id,
+                email: email,
+                full_name: fullName,
+                role: role,
+                updated_at: new Date().toISOString(),
+            })
+        if (profileError) {
+            console.error("Lỗi cập nhật bảng profiles:", profileError.message);
+        }
+        if(role === 'tutor'){
+              const {error: tutorError} = await supabaseAdmin.from('tutor_profiles')
             .insert({
                 user_id: authData.user.id,
                 verification_status: 'Draft',
                 is_verified: false
             })
-        if(tutorError){
-            console.error('Lỗi khởi tạo hồ sơ gia sư', tutorError.message)
-            const supabaseAdmin = createBasicClient(
-                process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                process.env.SUPABASE_SERVICE_ROLE_KEY!
-            )
-            await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
-            return {
-                success: false,
-                errors: 'Hệ thống gặp sự cố khi khởi tạo hồ sơ gia sư. Vui lòng thử lại sau.'
+            if(tutorError){
+                console.error('Lỗi khởi tạo hồ sơ gia sư', tutorError.message)
+                await supabaseAdmin.from('profiles').delete().eq('id', authData.user.id)
+                await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+                return {
+                    success: false,
+                    errors: 'Hệ thống gặp sự cố khi khởi tạo hồ sơ gia sư. Vui lòng thử lại sau.'
+                }
             }
         }
+      
     }
-
     await supabase.auth.signOut()
     revalidatePath('/', 'layout')
     redirect('/login?signup=success')
@@ -201,41 +215,68 @@ export async function login(
   prevState: ActionState | null,
   formData: FormData
 ): Promise<ActionState> {
-  const supabase = await createClient()
+    const supabase = await createClient()
 
-  const rawData = {
-    email: formData.get('email'),
-    password: formData.get('password'),
-  }
-
-  // 1. Validate với Zod Schema
-  const validationResult = loginSchema.safeParse(rawData)
-  if (!validationResult.success) {
-    const fieldErrors = validationResult.error.flatten().fieldErrors
-    const firstErrorMessage =
-      Object.values(fieldErrors).flat()[0] || 'Vui lòng kiểm tra lại thông tin đăng nhập'
-
-    return {
-      success: false,
-      errors: firstErrorMessage,
-      fieldErrors: fieldErrors,
+    const rawData = {
+        email: formData.get('email'),
+        password: formData.get('password'),
     }
-  }
 
-  const { email, password } = validationResult.data
+    // 1. Validate với Zod Schema
+    const validationResult = loginSchema.safeParse(rawData)
+    if (!validationResult.success) {
+        const fieldErrors = validationResult.error.flatten().fieldErrors
+        const firstErrorMessage =
+        Object.values(fieldErrors).flat()[0] || 'Vui lòng kiểm tra lại thông tin đăng nhập'
 
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
-
-  if (error) {
-    return {
-      success: false,
-      errors: 'Email hoặc mật khẩu không chính xác. Vui lòng thử lại.',
+        return {
+        success: false,
+        errors: firstErrorMessage,
+        fieldErrors: fieldErrors,
+        }
     }
-  }
 
-  revalidatePath('/', 'layout')
-  redirect('/')
+    const { email, password } = validationResult.data
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+    })
+
+    if (error) {
+        return {
+        success: false,
+        errors: 'Email hoặc mật khẩu không chính xác. Vui lòng thử lại.',
+        }
+    }
+    let userRole = 'student';
+  
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .single()
+
+    if(profile?.role){
+        userRole = profile.role;
+
+    }
+    let redirectPath = '/'
+    if (userRole === 'admin') {
+        redirectPath = '/admin'
+    } else if (userRole === 'tutor') {
+        redirectPath = '/dashboard/tutor'
+    }
+    
+    // Đồng bộ role vào user_metadata nếu chưa có
+    if (!data.user.user_metadata?.role) {
+        await supabase.auth.updateUser({
+        data: { role: userRole },
+        })
+    }
+
+    
+    
+    revalidatePath('/', 'layout')
+    redirect(redirectPath)
 }

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import Image from 'next/image';
 import { createClient } from '@/src/lib/supabase/client';
+import { StudentBreadcrumb } from '@/src/app/_components/layout/returnHome';
 import {
   Star,
   Send,
@@ -195,6 +196,7 @@ export default function StudentReviewsPage() {
   return (
     <main className="bg-slate-50/50 pb-8 pt-3">
       <div className="mx-auto max-w-6xl">
+        <StudentBreadcrumb current='Đánh giá gia sư'/>
 
         {/* Main card */}
         <div className="relative overflow-hidden rounded-[32px] border border-blue-100/80 bg-gradient-to-br from-[#eff6ff] via-[#f5f9ff] to-[#eaf3ff] p-3 shadow-[0_20px_60px_rgba(37,99,235,0.08)] sm:rounded-[40px] sm:p-5">

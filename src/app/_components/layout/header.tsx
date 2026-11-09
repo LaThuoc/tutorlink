@@ -63,7 +63,12 @@ export function Header() {
         const fullName = user.user_metadata?.full_name || user.email || "";
         setUserName(fullName);
         setUserInitials(getInitials(fullName));
-        setUserRole(user.user_metadata?.role || "student");
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        setUserRole(profile?.role || "student");
       } else {
         setIsLoggedIn(false);
         setUserRole(null);
@@ -72,13 +77,19 @@ export function Header() {
 
     getUserData();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         setIsLoggedIn(true);
         const fullName = session.user.user_metadata?.full_name || session.user.email || "";
         setUserName(fullName);
         setUserInitials(getInitials(fullName));
-        setUserRole(session.user.user_metadata?.role || "student");
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+        setUserRole(profile?.role || "student");
       } else {
         setIsLoggedIn(false);
         setUserRole(null);

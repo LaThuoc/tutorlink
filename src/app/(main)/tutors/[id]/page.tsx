@@ -1,82 +1,25 @@
 'use client';
 
-import { useEffect, useMemo, useState, use } from 'react';
+import { useEffect, useMemo, useState, use, useActionState, useCallback } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/src/lib/supabase/client';
+import ConfirmModal from '@/src/app/_components/student/CofirmModal';
+import BookingModal from '@/src/app/_components/student/BookingModal';
+import { cancelBookingRequest, getExistingBookingRequest,  } from '@/src/modules/student/student.action';
+import { ExistingRequestStatus } from '@/src/types/tutor.type';
+import { toggleSaveTutor, checkIfTutorIsSaved } from '@/src/modules/student/savedTutor';
+
 import {
   Atom, Award, BadgeCheck, BookOpen, Briefcase, Calculator, CalendarDays, Check,
   CheckCircle2, ChevronLeft, ChevronRight, Clock, Code, FlaskConical, Globe, GraduationCap,
   Heart, Home, Info, Leaf, Loader2, Mail, MapPin, Medal, Phone, Quote, School, Send, Share2,
-  Sparkles, Star, Trophy, User, Users, type LucideIcon,
+  Sparkles, Star, Trophy, User, Users, type LucideIcon,X, AlertCircle, MessageSquare, Calendar,
+  XCircle, RefreshCw
 } from 'lucide-react';
 
 
-type TabType = 'about' | 'experience' | 'education' | 'reviews';
-
-type Item = { title: string; sub?: string; detail?: string; year?: string };
-type Experience = { role?: string; title?: string; period?: string; time?: string; description?: string; desc?: string; subtitle?: string };
-type Education = { degree?: string; school?: string; period?: string; time?: string; detail?: string; status?: string };
-type SlotRaw = string | { time: string; booked?: boolean };
-type ScheduleRaw = { day?: string; date?: string; slots?: SlotRaw[] };
-
-type FullTutorDetail = {
-  id: string;
-  user_id: string;
-  full_name: string;
-  avatar_url: string | null;
-  phone: string | null;
-  email: string | null;
-  headline: string;
-  bio: string;
-  quote: string;
-  subjects: string[];
-  grades: string[];
-  hourly_rate: number;
-  address: string;
-  is_online: boolean;
-  is_verified: boolean;
-  total_lessons_taught: number;
-  rating_avg: number;
-  rating_count: number;
-  school_name: string;
-  education: string;
-  experiences: Experience[];
-  educations: Education[];
-  certificates: Item[];
-  achievements: Item[];
-  skills: string[];
-  teaching_methods: string[];
-  schedules: ScheduleRaw[];
-};
-
-type Review = { id: string; rating: number; comment: string | null; created_at: string; name: string };
-
-type RawTutor = {
-  id: string;
-  user_id: string;
-  headline?: string | null;
-  bio?: string | null;
-  quote?: string | null;
-  subjects?: string[] | null;
-  grades?: string[] | null;
-  hourly_rate?: number | string | null;
-  address?: string | null;
-  is_online?: boolean | null;
-  is_verified?: boolean | null;
-  total_lessons_taught?: number | null;
-  rating_avg?: number | null;
-  rating_count?: number | null;
-  school_name?: string | null;
-  education?: string | null;
-  experiences?: unknown;
-  educations?: unknown;
-  schedules_data?: unknown;
-  certificates?: unknown;
-  achievements?: unknown;
-  skills?: string[] | null;
-  teaching_methods?: string[] | null;
-  user?: { full_name?: string | null; avatar_url?: string | null; phone?: string | null; email?: string | null; address?: string | null } | null;
-};
+import { TabType,Item, Experience,Education,SlotRaw,ScheduleRaw } from '@/src/types/tutor.type';
+import { FullTutorDetail, Review, RawTutor, SubjectDetailItem, CertificateItem } from '@/src/types/tutor.type';
 
 
 function parseJsonSafely<T>(val: unknown): T[] {
@@ -89,22 +32,34 @@ function parseJsonSafely<T>(val: unknown): T[] {
 
 function toItems(val: unknown): Item[] {
   return parseJsonSafely<unknown>(val)
-    .map((x): Item | null => {
-      if (typeof x === 'string') return { title: x };
+    .map((x): CertificateItem | null => {
+      if (typeof x === 'string'){
+        return {
+          id: crypto.randomUUID(),
+          title: x,
+          issuedBy: '',
+          issuedYear: '',
+          imageUrl: '',
+          isVerified: false,
+        };
+      }
       if (x && typeof x === 'object') {
         const o = x as Record<string, unknown>;
         const title = String(o.title ?? o.name ?? '');
         if (!title) return null;
         return {
+          id: String(o.id ?? crypto.randomUUID()),
           title,
-          sub: o.issuer ? String(o.issuer) : o.sub ? String(o.sub) : undefined,
           detail: o.detail ? String(o.detail) : undefined,
-          year: o.year ? String(o.year) : undefined,
+          issuedBy: String(o.issuedBy ?? o.issuer ?? o.sub ?? ''),
+          issuedYear: String(o.issuedYear ?? o.year ?? ''),
+          imageUrl: String(o.imageUrl ?? ''),
+          isVerified: Boolean(o.isVerified ?? false),
         };
       }
       return null;
     })
-    .filter((x): x is Item => x !== null);
+    .filter((x): x is CertificateItem => x !== null);
 }
 
 const DAY_KEYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'] as const;
@@ -234,18 +189,45 @@ function normalizeSlots(raw?: SlotRaw[]): Slot[] {
 
 function buildAvailability(schedules: ScheduleRaw[]) {
   const weekly: Partial<Record<DayKey, Slot[]>> = {};
-  const byDate: Record<string, Slot[]> = {};
+  
   for (const s of schedules) {
-    const slots = normalizeSlots(s.slots);
-    const key = dayKeyOf(s.day);
-    if (key) {
-      weekly[key] = [...(weekly[key] ?? []), ...slots];
+    const rawObj = s as unknown as {
+      dayOfWeek?: number;
+      startTime?: string;
+      endTime?: string;
+      isAvailable?: boolean;
+      time?: string;
+      booked?: boolean;
+      day?: string;
+      slots?: SlotRaw[];
+    };
+    
+
+    if (rawObj.dayOfWeek !== undefined) {
+      // Chuyển dayOfWeek (2: Thứ 2 -> 7: Thứ 7, 8/1: Chủ Nhật) sang DayKey
+      const dayMap: Record<number, DayKey> = {
+        2: 'T2', 3: 'T3', 4: 'T4', 5: 'T5', 6: 'T6', 7: 'T7', 8: 'CN', 1: 'CN'
+      };
+      const key = dayMap[rawObj.dayOfWeek];
+      if (key && rawObj.startTime) {
+        const timeStr = `${rawObj.startTime} - ${rawObj.endTime || ''}`.trim();
+        const slotItem: Slot = {
+          time: timeStr,
+          booked: rawObj.isAvailable === false || rawObj.booked === true
+        };
+        weekly[key] = [...(weekly[key] ?? []), slotItem];
+      }
       continue;
     }
-    const iso = parseDmy(s.date);
-    if (iso) byDate[iso] = [...(byDate[iso] ?? []), ...slots];
+
+    // 2. Dự phòng cho cấu trúc lồng cũ
+    const key = dayKeyOf(rawObj.day);
+    if (key) {
+      const slots = normalizeSlots(rawObj.slots);
+      weekly[key] = [...(weekly[key] ?? []), ...slots];
+    }
   }
-  return (d: Date): Slot[] => byDate[isoOf(d)] ?? weekly[KEY_OF_JS_DAY[d.getDay()]] ?? [];
+  return (d: Date): Slot[] => weekly[KEY_OF_JS_DAY[d.getDay()]] ?? [];
 }
 
 const MAX_MONTHS_AHEAD = 12;
@@ -410,6 +392,15 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(new Set());
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  
+  const [existingRequest, setExistingRequest] = useState<ExistingRequestStatus>(null)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [showContactModal, setShowContactModal] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+
 
   const toggleSlot = (id: string) =>
     setSelectedSlots((prev) => {
@@ -433,7 +424,7 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
         if (cancelled) return;
         if (!data) { setTutor(null); return; }
 
-        const raw = data as unknown as RawTutor;
+        const raw = data as unknown as RawTutor & { subject_details?: unknown; teaching_areas?: string[]; certificates_data?: unknown };
         const subjects = raw.subjects ?? [];
 
         setTutor({
@@ -460,11 +451,21 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
           experiences: parseJsonSafely<Experience>(raw.experiences),
           educations: parseJsonSafely<Education>(raw.educations),
           certificates: toItems(raw.certificates),
+          certificates_list: toItems(raw.certificates_data || raw.certificates) as CertificateItem[],
           achievements: toItems(raw.achievements),
           skills: raw.skills ?? [],
           teaching_methods: raw.teaching_methods ?? [],
           schedules: parseJsonSafely<ScheduleRaw>(raw.schedules_data),
+          subject_details: parseJsonSafely<SubjectDetailItem>(raw.subject_details),
+          teaching_areas: raw.teaching_areas ?? [],
+
         });
+        
+        const req = await getExistingBookingRequest(raw.user_id)
+        if(!cancelled) setExistingRequest(req)
+
+        const savedStatus = await checkIfTutorIsSaved(raw.user_id)
+        if(!cancelled) setIsSaved(savedStatus)
 
         const { data: rv } = await supabase
           .from('reviews')
@@ -490,6 +491,63 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
     if (targetId) load();
     return () => { cancelled = true; };
   }, [targetId, supabase]);
+  const handleOpenCancelModal = () => {
+    if (!existingRequest || !tutor || !existingRequest.id) {
+      return;
+    }
+    setShowCancelModal(true);
+  };
+  const handleCancelRequest = async () => {
+    if (!existingRequest || !tutor || !existingRequest.id) {
+      return
+    };
+    
+
+    setIsCancelling(true);
+    const res = await cancelBookingRequest(existingRequest.id);
+    setIsCancelling(false);
+    setShowCancelModal(false); 
+
+    if (res.success) {
+      setExistingRequest(null);
+      const select = `*, user:profiles!tutor_profiles_user_id_fkey (full_name, avatar_url, phone, email, address)`;
+      const {data: updateData} = await supabase.from('tutor_profiles')
+        .select(select)
+        .eq('user_id', tutor.user_id)
+        .maybeSingle()
+      if(updateData){
+        const raw = updateData as unknown as RawTutor
+        setTutor((prev) =>
+          prev ? {...prev, schedules: parseJsonSafely<ScheduleRaw>(raw.schedules_data),} : null)
+      }
+    } else {
+      alert(res.errors || 'Lỗi khi hủy yêu cầu.');
+    }
+  };
+   const handleBookingSuccess = useCallback( async () => {
+    setSelectedSlots(new Set());
+    if (tutor?.user_id) {
+    const req = await getExistingBookingRequest(tutor.user_id);
+    setExistingRequest(req);
+  }
+  }, [tutor])
+
+    const handleToggleSave = async () => {
+      if(!tutor) return 
+      setIsSaving(true)
+      const res = await toggleSaveTutor(tutor.user_id, isSaved)
+      setIsSaving(false)
+      if(res.success){
+        setIsSaved(res.saved ?? false)
+
+      }else if(res.requireAuth){
+        alert(res.errors || 'Vui lòng đăng nhập để lưu gia sư!')
+      }else{
+        alert(res.errors || 'Đã có lỗi xảy ra')
+      }
+    }
+
+
 
   if (loading) {
     return (
@@ -523,6 +581,13 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
 
   const achievementLines = [...tutor.achievements, ...tutor.certificates].map((x) => x.title);
   const methods = tutor.teaching_methods.length ? tutor.teaching_methods : tutor.skills;
+
+  const defaultSkillItems = [
+    "Sơ đồ hệ thống kiến thức",
+    "Giải nhanh bài tập Di truyền",
+    "Luyện đề thi thử sát thực tế"
+  ];
+  const skillListToDisplay = tutor.skills && tutor.skills.length > 0 ? tutor.skills : defaultSkillItems;
 
   return (
     <div className="min-h-screen bg-[#F4F8FC] pb-20 font-sans text-slate-800">
@@ -593,18 +658,104 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                     {tutor.school_name && <li className="flex items-center gap-2.5"><MapPin className="size-4 text-slate-500" />{tutor.school_name}</li>}
                     {tutor.education && <li className="flex items-center gap-2.5"><GraduationCap className="size-4 text-slate-500" />{tutor.education}</li>}
                     <li className="flex items-center gap-2.5"><Clock className="size-4 text-slate-500" />{tutor.is_online ? 'Có thể dạy Online và Offline' : 'Chỉ dạy Offline'}</li>
+                    {tutor.teaching_areas && tutor.teaching_areas.length > 0 && (
+                      <li className="flex items-start gap-2.5 pt-1">
+                        <MapPin className="mt-0.5 size-4 text-slate-500 shrink-0" />
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-slate-700">Khu vực nhận dạy:</span>
+                          {tutor.teaching_areas.map((area) => (
+                            <span key={area} className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-100">
+                              {area}
+                            </span>
+                          ))}
+                        </div>
+                      </li>
+                    )}
                   </ul>
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-[1.6fr_1fr_0.8fr]">
-                    <button type="button" className="flex h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700">
-                      <Send className="size-4" />
-                      Gửi yêu cầu học{selectedSlots.size > 0 && ` (${selectedSlots.size} khung giờ)`}
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    
+                    {/* TRẠNG THÁI 1: CHƯA GỬI YÊU CẦU (Default) */}
+                    {(!existingRequest || existingRequest.status === null) && (
+                      <button
+                        type="button"
+                        onClick={() => setIsBookingModalOpen(true)}
+                        className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700 cursor-pointer"
+                      >
+                        <Send className="size-4" />
+                        Gửi yêu cầu học{selectedSlots.size > 0 && ` (${selectedSlots.size} khung giờ)`}
+                      </button>
+                    )}
+
+                    {/* TRẠNG THÁI 2: ĐÃ GỬI (Pending) - Hiển thị Cụm 2 nút (Đang chờ + Hủy) */}
+                    {existingRequest?.status === 'Pending' && (
+                      <div className="flex flex-1 flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled
+                          className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 text-xs font-bold text-amber-700 cursor-default"
+                        >
+                          <Clock className="size-4 animate-spin text-amber-600" /> Đã gửi yêu cầu (Đang chờ trả lời)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleOpenCancelModal}
+                          disabled={isCancelling}
+                          className="flex h-11 items-center justify-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-4 text-xs font-bold text-rose-600 transition-colors hover:bg-rose-100 disabled:opacity-50 cursor-pointer"
+                        >
+                          {isCancelling ? <Loader2 className="size-4 animate-spin" /> : <XCircle className="size-4" />}
+                          Hủy yêu cầu
+                        </button>
+                      </div>
+                    )}
+
+                    {/* TRẠNG THÁI 3: BỊ TỪ CHỐI (Rejected) - Cho phép mở Modal để nộp lại */}
+                    {existingRequest?.status === 'Rejected' && (
+                      <div className="w-full space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsBookingModalOpen(true)}
+                          className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 cursor-pointer"
+                        >
+                          <AlertCircle className="size-4 text-rose-600" /> Yêu cầu bị từ chối - Gửi lại yêu cầu khác
+                        </button>
+                        {existingRequest.rejectionReason && (
+                          <div className="flex items-start gap-2 rounded-xl border border-rose-100 bg-rose-50/50 p-2.5 text-[11px] text-rose-800">
+                            <Info className="size-3.5 shrink-0 mt-0.5 text-rose-600" />
+                            <span><b>Lý do gia sư từ chối:</b> {existingRequest.rejectionReason}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* TRẠNG THÁI 4: ĐƯỢC CHẤP NHẬN (Accepted) - Mở Modal xem SĐT/Tên */}
+                    {existingRequest?.status === 'Accepted' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowContactModal(true)}
+                        className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-700 cursor-pointer"
+                      >
+                        <CheckCircle2 className="size-4" /> Đã kết nối thành công (Xem liên hệ)
+                      </button>
+                    )}
+
+                    {/* Nút Phụ: Lưu & Chia sẻ */}
+                    <button type="button" 
+                            onClick={handleToggleSave}
+                            disabled= {isSaving}
+                            className={`flex h-11 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-bold transition-colors cursor-pointer ${
+                                isSaved
+                                  ? 'border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100'
+                                  : 'border-blue-600 bg-white text-blue-600 hover:bg-blue-50'
+                            } disabled:opacity-50` }>
+                                {isSaving ? (
+                                  <Loader2 className="size-4 animate-spin" />
+                                ) : ( 
+                                  <Heart className={`size-4 ${isSaved ? 'fill-rose-600 text-rose-600' : ''}`} /> )}
+                                {isSaved ? 'Đã lưu' : 'Lưu'}
                     </button>
-                    <button type="button" className="flex h-11 items-center justify-center gap-2 rounded-lg border border-blue-600 bg-white text-sm font-bold text-blue-600 transition-colors hover:bg-blue-50">
-                      <Heart className="size-4" /> Lưu gia sư
-                    </button>
-                    <button type="button" className="flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50">
-                      <Share2 className="size-4" /> Chia sẻ
+                    <button type="button" className="flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50">
+                      <Share2 className="size-4" />
                     </button>
                   </div>
                 </div>
@@ -637,53 +788,63 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                       {tutor.quote && <QuoteBox text={tutor.quote} className="mt-4" />}
                     </div>
 
-                    {tutor.subjects.length > 0 && (
+                    {(tutor.subject_details && tutor.subject_details.length > 0) || tutor.subjects.length > 0 ? (
                       <div>
-                        <SectionTitle icon={BookOpen} className="mb-4">Môn học dạy</SectionTitle>
+                        <SectionTitle icon={BookOpen} className="mb-4">Môn học & Khối lớp nhận dạy</SectionTitle>
                         <div className="grid gap-4 sm:grid-cols-3">
-                          {tutor.subjects.map((sub) => {
-                            const m = SUBJECT_META[sub] ?? FALLBACK_META;
-                            const Icon = m.icon;
-                            return (
-                              <div key={sub} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
-                                <div className="flex gap-3">
-                                  <span className={`grid size-12 shrink-0 place-items-center rounded-xl ${m.tint}`}><Icon className="size-6" /></span>
-                                  <div>
-                                    <h4 className="text-sm font-bold text-slate-900">{sub}</h4>
-                                    <p className="mt-0.5 text-[13px] text-slate-600">{tutor.grades.join(', ') || 'Mọi cấp'}</p>
+                          {tutor.subject_details && tutor.subject_details.length > 0
+                            ? tutor.subject_details.map((sd, idx) => {
+                                const m = SUBJECT_META[sd.subject] ?? FALLBACK_META;
+                                const Icon = m.icon;
+                                const gradesText = Array.isArray(sd.grades)
+                                  ? sd.grades.join(', ')
+                                  : (sd.grade || tutor.grades.join(', ') || 'Mọi cấp');
+                                return (
+                                  <div key={idx} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                                    <div className="flex gap-3">
+                                      <span className={`grid size-12 shrink-0 place-items-center rounded-xl ${m.tint}`}><Icon className="size-6" /></span>
+                                      <div>
+                                        <h4 className="text-sm font-bold text-slate-900">{sd.subject}</h4>
+                                        <p className="mt-0.5 text-[13px] text-slate-600">{gradesText}</p>
+                                      </div>
+                                    </div>
+                                    {sd.tag && <span className="mt-3 ml-14 inline-block rounded-full bg-blue-50 px-3 py-1 text-[11px] font-medium text-blue-600">{sd.tag}</span>}
                                   </div>
-                                </div>
-                                {m.tag && <span className="mt-3 ml-14 inline-block rounded-full bg-blue-50 px-3 py-1 text-[11px] font-medium text-blue-600">{m.tag}</span>}
-                              </div>
-                            );
-                          })}
+                                );
+                              })
+                            : tutor.subjects.map((sub) => {
+                                const m = SUBJECT_META[sub] ?? FALLBACK_META;
+                                const Icon = m.icon;
+                                return (
+                                  <div key={sub} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                                    <div className="flex gap-3">
+                                      <span className={`grid size-12 shrink-0 place-items-center rounded-xl ${m.tint}`}><Icon className="size-6" /></span>
+                                      <div>
+                                        <h4 className="text-sm font-bold text-slate-900">{sub}</h4>
+                                        <p className="mt-0.5 text-[13px] text-slate-600">{tutor.grades.join(', ') || 'Mọi cấp'}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                         </div>
                       </div>
-                    )}
+                    ) : null}
+                    <div className="grid gap-6 sm:grid-cols-2">
+                      <div>
+                        <SectionTitle icon={Briefcase} className="mb-4">Kinh nghiệm &amp; Thành tích</SectionTitle>
+                        {tutor.achievements.length > 0 ? (
+                          <CheckList items={tutor.achievements.map((a) => a.title)} />
+                        ) : (
+                          <p className="text-xs text-slate-500">Chưa cập nhật thành tích.</p>
+                        )}
+                      </div>
 
-                    {(tutor.achievements.length > 0 || tutor.education) && (
-                      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-                        <div>
-                          <SectionTitle icon={Briefcase} className="mb-3">Kinh nghiệm &amp; Thành tích</SectionTitle>
-                          {tutor.achievements.length > 0 ? (
-                            <CheckList items={tutor.achievements.map((a) => a.title)} />
-                          ) : (
-                            <p className="text-xs text-slate-500">Chưa cập nhật thành tích.</p>
-                          )}
-                        </div>
-                        <div className="rounded-xl bg-blue-50/60 p-4 ring-1 ring-blue-100">
-                          <div className="flex gap-3">
-                            <GraduationCap className="size-7 shrink-0 text-blue-600" />
-                            <div>
-                              <p className="text-sm font-bold text-slate-900">{tutor.education || 'Gia sư'}</p>
-                              {tutor.school_name && <p className="text-xs text-slate-500">{tutor.school_name}</p>}
-                            </div>
-                          </div>
-                          {tutor.quote && <p className="mt-3 text-xs italic leading-relaxed text-slate-600">&ldquo;{tutor.quote}&rdquo;</p>}
-                          <p className="mt-2 text-right text-xs italic text-slate-500">- {tutor.full_name} -</p>
-                        </div>
+                      <div>
+                        <SectionTitle icon={Sparkles} className="mb-4">Kỹ năng nổi bật</SectionTitle>
+                        <CheckList items={skillListToDisplay} />
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
 
@@ -755,18 +916,33 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                       )}
                     </div>
 
-                    {tutor.certificates.length > 0 && (
+                    {tutor.certificates_list && tutor.certificates_list.length > 0 && (
                       <div>
-                        <SectionTitle icon={Award} className="mb-4">Bằng cấp &amp; chứng chỉ</SectionTitle>
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                          {tutor.certificates.map((c) => (
-                            <div key={c.title} className="flex gap-3 rounded-xl border border-slate-100 p-4">
-                              <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600"><Award className="size-5" /></span>
-                              <div className="min-w-0">
-                                <h4 className="text-[13px] font-bold text-slate-900">{c.title}</h4>
-                                {c.sub && <p className="text-xs text-slate-500">{c.sub}</p>}
-                                {c.detail && <p className="text-xs text-slate-500">{c.detail}</p>}
-                                {c.year && <p className="text-xs text-slate-500">{c.year}</p>}
+                        <SectionTitle icon={Award} className="mb-4">Bằng cấp &amp; Chứng chỉ minh chứng</SectionTitle>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          {tutor.certificates_list.map((c) => (
+                            <div key={c.id} className="flex flex-col gap-3 rounded-xl border border-slate-100 p-4 bg-white shadow-sm">
+                              <div className="flex gap-3 items-start">
+                                {c.imageUrl ? (
+                                  <img src={c.imageUrl} alt={c.title} className="size-14 shrink-0 rounded-lg object-cover border border-slate-200" />
+                                ) : (
+                                  <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600">
+                                    <Award className="size-5" />
+                                  </span>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <h4 className="text-[13px] font-bold text-slate-900">{c.title}</h4>
+                                    {c.isVerified && (
+                                      <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-100">
+                                        <CheckCircle2 className="size-3 text-emerald-600" /> Đã xác minh
+                                      </span>
+                                    )}
+                                  </div>
+                                  {c.issuedBy && <p className="text-xs text-slate-500">Cấp bởi: {c.issuedBy}</p>}
+                                  {c.issuedYear && <p className="text-xs text-slate-400">Năm cấp: {c.issuedYear}</p>}
+                                  {c.detail && <p className="text-xs text-slate-500 mt-1">{c.detail}</p>}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -863,6 +1039,21 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                     <p className="font-medium text-slate-800">{tutor.address}</p>
                   </div>
                 </li>
+                {tutor.teaching_areas && tutor.teaching_areas.length > 0 && (
+                  <li className="flex items-start gap-3.5 border-t border-slate-100 pt-3">
+                    <MapPin className="mt-0.5 size-[18px] text-emerald-600" />
+                    <div>
+                      <p className="text-slate-500 font-medium">Khu vực nhận dạy</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {tutor.teaching_areas.map((area) => (
+                          <span key={area} className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-100">
+                            {area}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </li>
+                )}
               </ul>
               {tutor.is_verified && (
                 <div className="mt-5 flex items-center gap-3 rounded-lg bg-emerald-50 p-3.5">
@@ -875,13 +1066,73 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
               )}
             </div>
 
-            <div className={`${card} p-6`}>
-              <SectionTitle icon={Sparkles} className="mb-4">Kỹ năng nổi bật</SectionTitle>
-              {tutor.skills.length > 0 ? <CheckList items={tutor.skills} /> : <p className="text-xs text-slate-400">Chưa cập nhật kỹ năng</p>}
-            </div>
           </aside>
         </div>
       </main>
+      <BookingModal
+        isOpen={isBookingModalOpen}
+        onClose={() => setIsBookingModalOpen(false)}
+        tutorId={tutor.user_id}
+        tutorName={tutor.full_name}
+        subjects={tutor.subjects}
+        selectedSlots={selectedSlots}
+        onSuccess={handleBookingSuccess}
+      
+      />
+      <ConfirmModal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleCancelRequest}
+        isLoading={isCancelling}
+        title="Xác nhận hủy yêu cầu"
+        message="Bạn có chắc chắn muốn hủy yêu cầu học này không? Hành động này sẽ mở lại khung giờ cho gia sư."
+        confirmText="Hủy yêu cầu"
+        cancelText="Bỏ qua"
+        variant="danger"
+      />
+      {showContactModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <h3 className="text-lg font-bold text-slate-900">Thông tin liên hệ Gia sư</h3>
+              <button type="button" onClick={() => setShowContactModal(false)} className="rounded-full p-1 text-slate-400 hover:bg-slate-100">
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="mt-5 space-y-4 text-sm">
+              <div className="flex items-center gap-3 rounded-2xl bg-emerald-50 p-3.5 text-emerald-800">
+                <CheckCircle2 className="size-6 text-emerald-600 shrink-0" />
+                <p className="text-xs font-semibold">Yêu cầu học của bạn đã được gia sư xác nhận. Dưới đây là thông tin liên hệ trực tiếp:</p>
+              </div>
+              <div className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <div>
+                  <p className="text-xs text-slate-500">Họ và tên gia sư</p>
+                  <p className="text-base font-bold text-slate-900">{tutor.full_name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Số điện thoại / Zalo</p>
+                  <p className="text-base font-extrabold text-blue-600">{tutor.phone || 'Chưa cập nhật'}</p>
+                </div>
+                {tutor.email && (
+                  <div>
+                    <p className="text-xs text-slate-500">Email</p>
+                    <p className="text-sm font-semibold text-slate-800">{tutor.email}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowContactModal(false)}
+                className="rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-blue-700"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

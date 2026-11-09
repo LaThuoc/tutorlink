@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { CheckCircle2, Mail, Send, RotateCcw } from "lucide-react";
-import { sendContact, type ContactState } from "@/src/validations/contact.schema";
+import { sendContact, type ContactState} from "@/src/modules/contact/contact_message";
 
 const initial: ContactState = {};
 

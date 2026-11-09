@@ -29,7 +29,6 @@ export interface CertificateItem{
   issuedYear: string,
   imageUrl: string,
   isVerified: boolean,
-
 }
 export type TutorWithProfile = Omit<
   TutorProfileRow, 
@@ -57,6 +56,8 @@ export type TutorActionState = {
   success: boolean
   errors?: string
   fieldErrors?: Record<string, string[] | undefined>
+  isCompleted?: boolean;
+  message?: string
 }
 
 
@@ -67,7 +68,13 @@ export interface ScheduleSlot  {
   endTime: string,
   isAvailable: boolean
 }
-
+export type ExistingRequestStatus = {
+  id: string;
+  status: 'Pending' | 'Accepted' | 'Rejected';
+  rejectionReason?: string | null;
+  subject?: string | null;
+  contactPhone?: string | null;
+} | null;
 
 
 
@@ -106,7 +113,7 @@ export type TutorCardData = {
   address: string | null;
   is_online: boolean;
   experience_years: number;
-  rating_avg: number | null;
+  rating_avg?: number | null;
   rating_count: number;
   school_name?: string | null;
   education?: string | null;
@@ -136,4 +143,165 @@ export type RawTutorRow = {
     province: string | null;
     address: string | null;
   }[] | null;
+};
+
+
+
+export type TabType = 
+  | 'about' 
+  | 'experience' 
+  | 'education' 
+  | 'reviews';
+
+export type Item = { 
+  title: string; 
+  sub?: string; 
+  detail?: string; 
+  year?: string; 
+};
+
+export type Experience = { 
+  role?: string; 
+  title?: string; 
+  period?: string; 
+  time?: string; 
+  description?: string; 
+  desc?: string; 
+  subtitle?: string; 
+};
+
+export type Education = { 
+  degree?: string; 
+  school?: string; 
+  period?: string; 
+  time?: string; 
+  detail?: string; 
+  status?: string; 
+};
+
+export type SlotRaw = 
+  | string 
+  | { 
+      time: string; 
+      booked?: boolean; 
+    };
+
+export type ScheduleRaw = { 
+  day?: string; 
+  date?: string; 
+  slots?: SlotRaw[]; 
+};
+
+export interface SubjectDetailItem {
+  subject: string;
+  grades?: string[];
+  grade?: string;
+  tag?: string;
+}
+
+export type FullTutorDetail = {
+  id: string;
+  user_id: string;
+  full_name: string;
+  avatar_url: string | null;
+  phone: string | null;
+  email: string | null;
+  headline: string;
+  bio: string;
+  quote: string;
+  subjects: string[];
+  grades: string[];
+  hourly_rate: number;
+  address: string;
+  is_online: boolean;
+  is_verified: boolean;
+  total_lessons_taught: number;
+  rating_avg: number;
+  rating_count: number;
+  school_name: string;
+  education: string;
+  experiences: Experience[];
+  educations: Education[];
+  certificates: Item[];
+  achievements: Item[];
+  skills: string[];
+  teaching_methods: string[];
+  schedules: ScheduleRaw[];
+  subject_details?: SubjectDetailItem[];
+  teaching_areas?: string[];
+  certificates_list?: CertificateItem[];
+};
+
+export type Review = { 
+  id: string; 
+  rating: number; 
+  comment: string | null; 
+  created_at: string; 
+  name: string; 
+};
+
+export type RawTutor = {
+  id: string;
+  user_id: string;
+  headline?: string | null;
+  bio?: string | null;
+  quote?: string | null;
+  subjects?: string[] | null;
+  grades?: string[] | null;
+  hourly_rate?: number | string | null;
+  address?: string | null;
+  is_online?: boolean | null;
+  is_verified?: boolean | null;
+  total_lessons_taught?: number | null;
+  rating_avg?: number | null;
+  rating_count?: number | null;
+  school_name?: string | null;
+  education?: string | null;
+  experiences?: unknown;
+  educations?: unknown;
+  schedules_data?: unknown;
+  certificates?: unknown;
+  achievements?: unknown;
+  skills?: string[] | null;
+  teaching_methods?: string[] | null;
+  user?: { 
+    full_name?: string | null; 
+    avatar_url?: string | null; 
+    phone?: string | null; 
+    email?: string | null; 
+    address?: string | null; 
+  } | null;
+};
+
+export type SavedTutorRow = {
+  tutor_id: string;
+  tutor_user?: {
+    full_name: string;
+    avatar_url: string | null;
+    district: string | null;
+    tutor_profile?: | {
+      headline: string | null;
+      subjects: string[] | null;
+      grades: string[] | null;
+      hourly_rate: number | null;
+      address: string | null;
+      is_online: boolean | null;
+      experience_years: number | null;
+      rating_avg: number | null;
+      rating_count: number | null;
+    } | Array<{
+      headline: string | null;
+      subjects: string[] | null;
+      grades: string[] | null;
+      hourly_rate: number | null;
+      address: string | null;
+      is_online: boolean | null;
+      experience_years: number | null;
+      rating_avg: number | null;
+      rating_count: number | null;
+    }> | null;
+    reviews?: Array<{
+      rating: number
+    }> | null
+  } | null;
 };

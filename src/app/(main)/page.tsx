@@ -1,13 +1,13 @@
-import { FeaturedTutors } from '@/src/app/components/home/FeaturedTutor' // hoặc '@/components/home/FeaturedTutor' tùy alias trong tsconfig.json
-import { StatsBand } from '@/src/app/components/home/StatsBand'
-import { HowItWorks } from '@/src/app/components/home/HowItWorks'
-import { Hero } from '@/src/app/components/home/HeroBanner'
-import { BentoSubjectsGrid } from '@/src/app/components/home/SubjectsMarquee'
-import { StudyTogether } from '@/src/app/components/home/StudyTogether'
-import { Testimonials } from '@/src/app/components/home/Testimonials'
-import TestimonialSection from '@/src/app/components/home/TestimonialCard'
-import { TutorCta } from '@/src/app/components/home/TutorCta'
-import { Questions } from '@/src/app/components/home/Questions'
+import { FeaturedTutors } from '@/src/app/_components/home/FeaturedTutor' // hoặc '@/components/home/FeaturedTutor' tùy alias trong tsconfig.json
+import { StatsBand } from '@/src/app/_components/home/StatsBand'
+import { HowItWorks } from '@/src/app/_components/home/HowItWorks'
+import { Hero } from '@/src/app/_components/home/HeroBanner'
+import { BentoSubjectsGrid } from '@/src/app/_components/home/SubjectsMarquee'
+import { StudyTogether } from '@/src/app/_components/home/StudyTogether'
+import { Testimonials } from '@/src/app/_components/home/Testimonials'
+import TestimonialSection from '@/src/app/_components/home/TestimonialCard'
+import { TutorCta } from '@/src/app/_components/home/TutorCta'
+import { Questions } from '@/src/app/_components/home/Questions'
 import { Suspense } from "react";
 
 
