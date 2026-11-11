@@ -311,29 +311,89 @@ export async function removeCertificates(certificatesIds: string[]): Promise<Tut
 
     const currentCertificates = (tutor.certificates_data as unknown as CertificateItem[]) || []
 
-    const updatedCertificates = currentCertificates.filter((item) => !certificatesIds.includes(item.id))
-
-    const {error} = await supabase
-        .from('tutor_profiles')
-        .update({certificates_data: updatedCertificates as unknown})
-        .eq('user_id', user.id)
-
-    if(error){
-        return {
-            success: false,
-            errors: error.message
+ 
+    // >>> SỬA: id truyền vào có thể là (a) id chứng chỉ trong certificates_data, hoặc (b) id dòng certificate_requests
+    // (chứng chỉ nộp từ lần cập nhật thứ 2 chỉ nằm trong certificate_requests). Xử lý cả hai.
+    const uuidIds = certificatesIds.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+ 
+    // Các dòng request thuộc về gia sư này khớp với id được chọn
+    let matchedRequestUrls: string[] = []
+    if(uuidIds.length > 0){
+        const {data: matchedRequests} = await supabase
+            .from('certificate_requests')
+            .select('certificate_url')
+            .eq('tutor_id', user.id)
+            .in('id', uuidIds)
+        matchedRequestUrls = (matchedRequests || []).map((r) => r.certificate_url).filter(Boolean)
+    }
+ 
+    // Chứng chỉ trong hồ sơ cần xóa: khớp id, hoặc khớp URL ảnh với request bị xóa
+    const removedCertificates = currentCertificates.filter(
+        (item) => certificatesIds.includes(item.id) || matchedRequestUrls.includes(item.imageUrl)
+    )
+ 
+    if(removedCertificates.length === 0 && matchedRequestUrls.length === 0){
+        return { success: false, errors: 'Không tìm thấy chứng chỉ cần xóa' }
+    }
+ 
+    // Tập URL ảnh cần dọn khỏi certificate_requests
+    const urlsToRemove = Array.from(new Set([
+        ...removedCertificates.map((c) => c.imageUrl),
+        ...matchedRequestUrls,
+    ].filter(Boolean)))
+    // <<< HẾT SỬA
+ 
+    // Chỉ cập nhật certificates_data khi thật sự có chứng chỉ trong hồ sơ bị xóa
+    if(removedCertificates.length > 0){
+        const updatedCertificates = currentCertificates.filter(
+            (item) => !removedCertificates.some((r) => r.id === item.id)
+        )
+ 
+        const {error} = await supabase
+            .from('tutor_profiles')
+            .update({certificates_data: updatedCertificates as unknown, updated_at: new Date().toISOString()})
+            .eq('user_id', user.id)
+ 
+        if(error){
+            return {
+                success: false,
+                errors: error.message
+            }
         }
     }
-
-    const {error: RequestDeleteError} = await supabase.from('certificate_requests').delete().eq('tutor_id', user.id).in('id', certificatesIds)
-    if(RequestDeleteError){
-            console.error('Lỗi dọn dẹp lịch sử yêu cầu chứng chỉ', RequestDeleteError.message)
+ 
+    // >>> SỬA: dọn certificate_requests theo URL ảnh và theo id (uuid)
+    if(urlsToRemove.length > 0){
+        const {error: deleteByUrlError} = await supabase
+            .from('certificate_requests')
+            .delete()
+            .eq('tutor_id', user.id)
+            .in('certificate_url', urlsToRemove)
+        if(deleteByUrlError){
+            console.error('Lỗi dọn lịch sử yêu cầu chứng chỉ (theo URL)', deleteByUrlError.message)
+        }
     }
+    if(uuidIds.length > 0){
+        const {error: deleteByIdError} = await supabase
+            .from('certificate_requests')
+            .delete()
+            .eq('tutor_id', user.id)
+            .in('id', uuidIds)
+        if(deleteByIdError){
+            console.error('Lỗi dọn lịch sử yêu cầu chứng chỉ (theo ID)', deleteByIdError.message)
+        }
+    }
+    // <<< HẾT SỬA
+ 
+
+
+
     revalidatePath('/dashboard/profile')
     revalidatePath('/admin/certificates')
+    revalidatePath('/dashboard/profiletutor') 
     revalidatePath(`/tutors/${user.id}`)
 
-    return { success: true }
+    return { success: true, message: 'Đã xóa chứng chỉ thành công' }
 }
 
 export async function updateTutorExperienceAndSkills(payload: {
@@ -486,87 +546,4 @@ export async function updateTutorEducations(educations: EducationItem[]): Promis
             errors: errorMessage 
         }; 
     }
-}
-
-
-
-export async function updateBookingStatus(requestId: string, tutorId: string, action: 'Accepted' | 'Rejected'){
-    const { user, supabase } = await requireTutorRole()
-
-    const {data: bookingReq} = await supabase.from('booking_requests').select('schedule_slot_id')
-        .eq('id', requestId).eq('tutor_id',tutorId ).single()
-    if(!bookingReq) return { success:false, errors: 'Không tìm thấy yêu cầu'}
-
-    const {error} = await supabase.from('booking_request')
-            .update({status: action, updated_at: new Date().toISOString()})
-            .eq('id', requestId)
-
-    if(error) return {success: false, errors: error.message}
-
-    if(action === 'Accepted' && bookingReq.schedule_slot_id){
-        const {data: tutor} = await supabase.from('tutor_profiles')
-            .select('schedules_data')
-            .eq('user_id', tutorId)
-            .single()
-        
-        const currentSlots = (tutor?.schedules_data as unknown as ScheduleSlot[]) || []
-
-        const updatedSlots = currentSlots.map((slot) =>  slot.id === bookingReq.schedule_slot_id
-            ? {...slot, isAvailable: false}
-            : slot
-        )
-
-        await supabase.from('tutor_profiles').update({schedules_data: updatedSlots as unknown}).eq('user_id', tutorId)
-        
-        revalidatePath('/dashboard/requests')
-        revalidatePath(`/tutors/${tutorId}`)
-    }
-}
-
-
-export async function completeBookingRequest(requestId: string, tutorId: string){
-    const { user, supabase } = await requireTutorRole()
-    const {data: bookingReq} = await supabase.from('booking_requests')
-        .select('status')
-        .eq('id', requestId)
-        .eq('tutor_id', tutorId)
-        .single()
-    if(!bookingReq || bookingReq.status !== 'Accepted'){
-        return {
-            success: false,
-            errors: 'Chỉ có thể hoàn thành các yêu cầu đã được chấp nhận'
-        }
-    }
-
-    const {error: updatedError} = await supabase.from('booking_requests')
-        .update({
-            status: 'Completed',
-            updated_at: new Date().toISOString()
-        })
-        .eq('id', requestId)
-
-    if(updatedError){
-        return {
-            success: false,
-            errors: updatedError.message
-        }
-    }
-
-    const {data: tutor} = await supabase.from('tutor_profiles')
-        .select('total_lessons_taught')
-        .eq('user_id', tutorId)
-        .single()
-
-    const currentLessons = tutor?.total_lessons_taught || 0
-    await supabase.from('tutor_profiles')
-        .update({
-            total_Lessons_taught: currentLessons + 1,
-            updated_at: new Date().toISOString()
-        })
-        .eq('user_id', tutorId)
-
-    revalidatePath('/dashboard/requests')
-    revalidatePath(`/tutors/${tutorId}`)
-
-    return { success: true }
 }

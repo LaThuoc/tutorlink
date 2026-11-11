@@ -20,6 +20,8 @@ export interface EducationItem {
   gpa?: string,
   status: string,
   description: string,
+  degree?: string;
+  school?: string;
 }
 export interface CertificateItem{
   id: string,
@@ -305,3 +307,32 @@ export type SavedTutorRow = {
     }> | null
   } | null;
 };
+
+
+
+export type BookingStatus = 'Pending' | 'Accepted' | 'Rejected' | 'Cancelled' | 'Completed';
+
+
+export interface StudentProfile {
+  full_name: string | null;
+  avatar_url: string | null;
+  email?: string | null;
+  phone?: string | null;
+}
+
+export interface BookingRequestItem {
+  id: string;
+  student_id: string;
+  tutor_id: string;
+  subject: string;
+  message: string | null;
+  contact_phone: string;
+  status: BookingStatus;
+  created_at: string;
+  updated_at: string;
+  schedule_slot_id: string | null;
+  rejection_reason: string | null;
+  lesson_date?: string | null;
+  lesson_status?: 'Pending' | 'Completed' | 'Cancelled' | null;
+  student?: StudentProfile | null;
+}

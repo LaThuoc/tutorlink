@@ -55,7 +55,7 @@ export async function processNewCertificateRequest(
     requestId: string,
     tutorId: string,
     action: 'Approve' | 'Reject',
-    rejectionReason: string
+    rejectionReason?: string
 ){
     try{
         const {supabase} = await requireAdminRole()
@@ -111,10 +111,16 @@ export async function processNewCertificateRequest(
                     success: false,
                     errors: `Lỗi cập nhật hồ sơ: ${updateTutorError.message}`
             }}
-            await supabase
+            const {error: updateReqError} =  await supabase
                 .from('certificate_requests')
                 .update({ status: 'Approved', rejection_reason: null })
                 .eq('id', requestId);
+            if (updateReqError) {
+                return {
+                    success: false,
+                    errors: `Lỗi cập nhật trạng thái certificate_requests (Kiểm tra RLS): ${updateReqError.message}`
+                };
+            }
         }else{
             await supabase.from('certificate_requests')
                 .update({
@@ -143,3 +149,98 @@ export async function processNewCertificateRequest(
 }
 
 
+
+
+
+
+
+/**
+ * 1. Lấy dữ liệu thống kê tổng quan cho Admin Dashboard
+ */
+export async function getAdminStats() {
+  try {
+    const { supabase } = await requireAdminRole();
+
+    const [tutorsRes, studentsRes, requestsRes, pendingCertsRes] = await Promise.all([
+      supabase.from('tutor_profiles').select('user_id', { count: 'exact', head: true }),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'student'),
+      supabase.from('booking_requests').select('id', { count: 'exact', head: true }),
+      supabase.from('certificate_requests').select('id', { count: 'exact', head: true }).eq('status', 'Pending'),
+    ]);
+
+    return {
+      totalTutors: tutorsRes.count || 0,
+      totalStudents: studentsRes.count || 0,
+      totalRequests: requestsRes.count || 0,
+      pendingCertificates: pendingCertsRes.count || 0,
+    };
+  } catch (err) {
+    console.error('[getAdminStats] Error:', err);
+    return { totalTutors: 0, totalStudents: 0, totalRequests: 0, pendingCertificates: 0 };
+  }
+}
+
+/**
+ * 2. Lấy danh sách các yêu cầu xác minh chứng chỉ đang chờ duyệt
+ */
+/**
+ * 2. Lấy danh sách các yêu cầu xác minh chứng chỉ đang chờ duyệt (Đã sửa query)
+ */
+export async function getPendingCertificates() {
+  try {
+    const { supabase } = await requireAdminRole();
+
+    // 🔴 IN LOG 1: Kiểm tra xem hàm đã chạy vào đây chưa
+    console.log('===> [DEBUG] Đang truy vấn certificate_requests...');
+
+    const { data: certRequests, error: certError } = await supabase
+      .from('certificate_requests')
+      .select('*')
+      .eq('status', 'Pending')
+      .order('created_at', { ascending: false });
+
+    // 🔴 IN LOG 2: In lỗi từ Supabase nếu có
+    if (certError) {
+      console.error('===> [LỖI SUPABASE CERT]:', certError);
+      throw certError;
+    }
+
+    console.log('===> [DEBUG] Danh sách cert_requests tìm thấy:', certRequests);
+
+    if (!certRequests || certRequests.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    const tutorIds = Array.from(new Set(certRequests.map((c) => c.tutor_id)));
+    console.log('===> [DEBUG] Danh sách tutor_id cần lấy:', tutorIds);
+
+    const { data: tutors, error: tutorError } = await supabase
+      .from('tutor_profiles')
+      .select('user_id, school_name, education, profiles(full_name, email, phone, avatar_url)')
+      .in('user_id', tutorIds);
+
+    if (tutorError) {
+      console.error('===> [LỖI SUPABASE TUTOR]:', tutorError);
+    }
+
+    console.log('===> [DEBUG] Kết quả join tutor_profiles:', tutors);
+
+    const formattedData = certRequests.map((cert) => {
+      const tutor = tutors?.find((t) => t.user_id === cert.tutor_id);
+      return {
+        ...cert,
+        tutor_profiles: tutor || {
+          school_name: 'Chưa cập nhật',
+          education: '',
+          profiles: { full_name: 'Gia sư', email: '', phone: '', avatar_url: '' }
+        }
+      };
+    });
+
+    return { success: true, data: formattedData };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Lỗi khi tải danh sách chứng chỉ';
+    console.error('===> [CATCH ERROR]:', msg);
+    return { success: false, error: msg, data: [] };
+  }
+}

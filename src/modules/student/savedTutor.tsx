@@ -44,7 +44,7 @@ export async function toggleSaveTutor(tutorUserId: string, currentSaved: boolean
         if (isAuthError) {
         return { 
             success: false, 
-            requireAuth: true, // 👈 Đảm bảo trả về cờ requireAuth khi throw error
+            requireAuth: true, 
             errors: 'Vui lòng đăng nhập để thực hiện thao tác này!' 
         };
         }

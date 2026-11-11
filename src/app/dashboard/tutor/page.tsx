@@ -1,11 +1,12 @@
 import React from 'react';
-import TutorDashboardClient from '@/src/app/_components/dashboard/tutor/TutorDashboardClient';
+import { getDashboardTutorData } from '@/src/modules/tutor/getDashboardTutorData';
+import TutorDashboardClient from '../../_components/dashboard/tutor/TutorDashboardClient';
 
-export const metadata = {
-  title: 'GiaSuHub – Tổng quan gia sư',
-  description: 'Trang quản lý lịch dạy và yêu cầu học cho gia sư trên GiaSuHub.',
-};
+export const revalidate = 0;
 
-export default function TutorDashboardPage() {
-  return <TutorDashboardClient />;
+export default async function TutorDashboardPage() {
+  const res = await getDashboardTutorData();
+  const dashboardData = res.data;
+
+  return <TutorDashboardClient data={dashboardData} />;
 }
