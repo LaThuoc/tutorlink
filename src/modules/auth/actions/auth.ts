@@ -8,7 +8,7 @@ import { ActionState } from "../../../types/auth.type"
 import { createClient as createBasicClient } from "@supabase/supabase-js"
 
 
-export async function signup(prevState: ActionState, formData: FormData): Promise<ActionState | void>{
+export async function signup(prevState: ActionState | void, formData: FormData): Promise<ActionState>{
     const supabase = await createClient()
 
     const rawData = {

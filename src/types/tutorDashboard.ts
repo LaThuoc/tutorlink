@@ -32,3 +32,26 @@ export interface ReviewItem {
   date: string;
   comment: string;
 }
+
+
+
+export interface BookingRequestItem {
+  id: string;
+  student_id: string;
+  tutor_id: string;
+  subject: string;
+  message: string | null;
+  contact_phone: string;
+  status: 'Pending' | 'Accepted' | 'Rejected' | 'Cancelled';
+  schedule_slot_id: string | null;
+  lesson_date?: string | null; 
+  lesson_status?: 'Pending' | 'Completed' | 'Cancelled'; 
+  created_at: string;
+  updated_at: string;
+  rejection_reason?: string | null;
+  student?: {
+    full_name: string;
+    avatar_url?: string | null;
+    phone?: string | null;
+  };
+}

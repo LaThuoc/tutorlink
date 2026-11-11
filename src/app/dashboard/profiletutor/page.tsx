@@ -70,7 +70,7 @@ export default function TutorProfilePage() {
   const [status, setStatus] = useState<ProfileStatus>('pending');
   const [profileData, setProfileData] = useState<TutorProfileFullData>(EMPTY_PROFILE);
 
-  
+ 
   const fetchProfileData = useCallback(async (forceCompleted = false) => {
     const supabase = createClient();
     try {
@@ -79,13 +79,18 @@ export default function TutorProfilePage() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const [{ data: prof, error: profErr }, { data: tut, error: tutErr }] = await Promise.all([
+      const [{ data: prof, error: profErr }, { data: tut, error: tutErr }, { data: pendingReqs }] = await Promise.all([
         supabase
           .from('profiles')
           .select('full_name, avatar_url, gender, date_of_birth, phone, province, district, address')
           .eq('id', user.id)
           .maybeSingle(),
         supabase.from('tutor_profiles').select('*').eq('user_id', user.id).maybeSingle(),
+        supabase
+          .from('certificate_requests')
+          .select('id, title, issued_by, issue_year, detail, certificate_url')
+          .eq('tutor_id', user.id)
+          .eq('status', 'Pending'),
       ]);
 
       if (profErr) console.error('[TutorProfile] Lỗi đọc profiles:', profErr);
@@ -98,8 +103,24 @@ export default function TutorProfilePage() {
         forceCompleted || tut?.is_completed || (tut?.headline && subjectDetails.length > 0),
       );
 
-      // Chỉ nạp dữ liệu khi hồ sơ đã nộp; chưa nộp thì giữ form trống
       if (tut && isCompleted) {
+        const savedCerts = safeParseArray<TutorProfileFullData['certificates'][number]>(
+          tut.certificates_data ?? tut.certificates,
+        );
+        const savedUrls = new Set(savedCerts.map((c) => c.imageUrl));
+        const pendingCerts = (pendingReqs || [])
+          .filter((r) => r.certificate_url && !savedUrls.has(r.certificate_url))
+          .map((r) => ({
+            id: r.id,
+            title: r.title || 'Bằng cấp / Chứng chỉ',
+            issuedBy: r.issued_by || '',
+            issuedYear: r.issue_year || '',
+            detail: r.detail || '',
+            imageUrl: r.certificate_url,
+            isVerified: false,
+          }));
+        const mergedCertificates = [...savedCerts, ...pendingCerts];
+
         const modes = safeParseArray<string>(tut.teaching_modes);
         setProfileData({
           avatarUrl: prof?.avatar_url || '',
@@ -122,7 +143,7 @@ export default function TutorProfilePage() {
           achievements: safeParseArray<string>(tut.achievements),
           subjectDetails: subjectDetails as TutorProfileFullData['subjectDetails'],
           educations: safeParseArray(tut.educations),
-          certificates: safeParseArray(tut.certificates_data ?? tut.certificates),
+          certificates: mergedCertificates, // >>> SỬA: dùng danh sách đã gộp
           experiences: safeParseArray(tut.experiences),
           isCompleted: true,
         });
@@ -132,12 +153,10 @@ export default function TutorProfilePage() {
     }
   }, []);
 
-  // 1) Nạp lần đầu khi mở trang
   useEffect(() => {
     fetchProfileData();
   }, [fetchProfileData]);
 
-  // 2) Nạp lại ngay sau khi submit thành công -> màn "hồ sơ đã gửi" có đủ dữ liệu
   useEffect(() => {
     if (state?.success) {
       fetchProfileData(Boolean(state.isCompleted));
@@ -145,7 +164,6 @@ export default function TutorProfilePage() {
   }, [state, fetchProfileData]);
 
   const isSubmitted = profileData.isCompleted;
-  // Vừa submit xong, đang chờ dữ liệu từ DB về -> tránh chớp form trống
   const waitingRefetch = Boolean(state?.success && state?.isCompleted) && !profileData.isCompleted;
 
   if (loading || waitingRefetch) {

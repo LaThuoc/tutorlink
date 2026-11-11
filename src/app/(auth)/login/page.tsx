@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useActionState, useTransition, } from "react";
+import { useState, useActionState, useTransition, Suspense} from "react";
 import Link from "next/link";
 import { useSearchParams} from "next/navigation";
-import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import { GraduationCap, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2, Loader2} from "lucide-react";
 import { login, signInWithGoogle } from "@/src/modules/auth/actions/auth";
 import { ActionState } from "@/src/types/auth.type";
 
@@ -12,8 +12,7 @@ const initialState: ActionState = {
   errors: undefined,
   fieldErrors: undefined,
 };
-
-export default function LoginPage() {
+function LoginFormContent() {
   const [showPassword, setShowPassword] = useState(false);
   const searchParams = useSearchParams();
   const [isGooglePending, startGoogleTransition] = useTransition();
@@ -184,6 +183,20 @@ export default function LoginPage() {
         </div>
 
       </div>
+    </div>
+  );
+}
+export default function LoginPage() {
+  return (
+    <div className="min-h-screen w-full bg-slate-50 flex items-center justify-center p-4 sm:p-6 lg:p-8">
+      <Suspense fallback={
+        <div className="flex flex-col items-center justify-center gap-2 p-8 bg-white rounded-3xl border border-slate-200/80 shadow-xl w-full max-w-md">
+          <Loader2 className="size-8 text-blue-600 animate-spin" />
+          <span className="text-xs font-semibold text-slate-400">Đang tải trang đăng nhập...</span>
+        </div>
+      }>
+        <LoginFormContent />
+      </Suspense>
     </div>
   );
 }

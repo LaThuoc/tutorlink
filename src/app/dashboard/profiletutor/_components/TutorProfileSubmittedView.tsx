@@ -16,6 +16,7 @@ import {
 import {
   updateTutorEducations,
   updateTutorCertificates,
+  removeCertificates, 
   updateTutorExperienceAndSkills,
   updateTutorPersonalInfo,
 } from '@/src/modules/tutor/tutor';
@@ -216,10 +217,7 @@ export default function TutorProfileSubmittedView({ data, status = 'pending', on
   const [successMsg, setSuccessMsg] = useState('');
   const [formError, setFormError] = useState('');
   const [isPending, startTransition] = useTransition();
-
   const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
-
-  // States
   const [fullName, setFullName] = useState(data.fullName || '');
   const [dateOfBirth, setDateOfBirth] = useState(data.dateOfBirth || '');
   const [gender, setGender] = useState(data.gender || 'Nam');
@@ -247,6 +245,7 @@ export default function TutorProfileSubmittedView({ data, status = 'pending', on
 
   const [educations, setEducations] = useState<EducationItem[]>(data.educations || []);
   const [certificates, setCertificates] = useState<CertificateItem[]>(data.certificates || []);
+  const [deletingCertId, setDeletingCertId] = useState<string | null>(null); // >>> SỬA: id chứng chỉ đang xóa
   const [experiences, setExperiences] = useState<ExperienceItem[]>(data.experiences || []);
   const [achievements, setAchievements] = useState<string[]>(data.achievements || []);
   const [skills, setSkills] = useState<string[]>(data.skills || []);
@@ -343,11 +342,42 @@ export default function TutorProfileSubmittedView({ data, status = 'pending', on
       if (res.success) {
         setSuccessMsg(res.message || 'Gửi yêu cầu xét duyệt chứng chỉ thành công!');
         closeEditor();
+        onSaved?.(); 
       } else {
         setFormError(res.errors || 'Lỗi khi gửi chứng chỉ xét duyệt.');
       }
     });
   };
+
+
+  const handleDeleteCertificate = (c: CertificateItem, idx: number) => {
+    const isSavedInProfile = (data.certificates || []).some((x) => x.id === c.id);
+
+    if (!isSavedInProfile) {
+      setCertificates((prev) => prev.filter((_, i) => i !== idx));
+      return;
+    }
+
+    const ok = window.confirm(
+      `Bạn có chắc muốn xóa chứng chỉ "${c.title || 'chưa đặt tên'}"? Hành động này không thể hoàn tác.`,
+    );
+    if (!ok) return;
+
+    setFormError('');
+    setSuccessMsg('');
+    setDeletingCertId(c.id);
+    startTransition(async () => {
+      const res = await removeCertificates([c.id]);
+      setDeletingCertId(null);
+      if (res.success) {
+        setCertificates((prev) => prev.filter((x) => x.id !== c.id));
+        setSuccessMsg(res.message || 'Đã xóa chứng chỉ thành công!');
+      } else {
+        setFormError(res.errors || 'Lỗi khi xóa chứng chỉ.');
+      }
+    });
+  };
+
 
   const handleSaveExperienceAndSkills = () => {
     setFormError('');
@@ -588,7 +618,6 @@ export default function TutorProfileSubmittedView({ data, status = 'pending', on
           )}
         </Section>
 
-        {/* MỤC 2A */}
         <Section
           step="2A"
           icon={GraduationCap}
@@ -655,7 +684,7 @@ export default function TutorProfileSubmittedView({ data, status = 'pending', on
         >
           {editingSection !== 'certificates' ? (
             <div>
-              {certificates.length === 0 ? <Empty>Chưa có chứng chỉ nào được duyệt.</Empty> : (
+              {certificates.length === 0 ? <Empty>Chưa có chứng chỉ nào.</Empty> : (
                 <div className="grid gap-3 sm:grid-cols-2">
                   {certificates.map((c, i) => (
                     <div key={i} className="flex items-start gap-3 rounded-xl border border-slate-100 p-4 bg-slate-50/50">
@@ -726,10 +755,16 @@ export default function TutorProfileSubmittedView({ data, status = 'pending', on
                     </span>
                     <button
                       type="button"
-                      onClick={() => setCertificates(certificates.filter((_, i) => i !== idx))}
-                      className="inline-flex cursor-pointer items-center gap-1 text-xs font-bold text-rose-600 hover:underline"
+                      disabled={isPending}
+                      onClick={() => handleDeleteCertificate(c, idx)}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <Trash2 className="size-3.5" aria-hidden="true" /> Xóa
+                      {deletingCertId === c.id ? (
+                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Trash2 className="size-3.5" aria-hidden="true" />
+                      )}
+                      {deletingCertId === c.id ? 'Đang xóa...' : 'Xóa chứng chỉ'}
                     </button>
                   </div>
 

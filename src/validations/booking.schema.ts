@@ -4,6 +4,7 @@ export const createBookingRequestSchema = z.object({
     tutorId: z.string().uuid('ID gia sư không hợp lệ '),
     scheduleSlotIds: z.array(z.string()).min(1, "Vui lòng chọn ít nhất một khung giờ"),
     subject: z.string().min(1, 'Vui lòng chọn một môn học'),
+    lessonDate: z.string().min(1, 'Vui lòng chọn ngày bắt đầu học cụ thể'),
     contactPhone: z
     .string()
     .trim()

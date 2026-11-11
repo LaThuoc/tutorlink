@@ -13,7 +13,8 @@ export async function createBookingRequest(prevState: TutorActionState | void, f
         scheduleSlotIds: formData.getAll('scheduleSlotIds') as string[],
         subject: formData.get('subject') as string,
         contactPhone: formData.get('contactPhone') as string,
-        message: formData.get("message") as string
+        message: formData.get("message") as string,
+        lessonDate: formData.get('lessonDate') as string,
     }
 
     const validation = createBookingRequestSchema.safeParse(rawData)
@@ -25,7 +26,7 @@ export async function createBookingRequest(prevState: TutorActionState | void, f
         }
     }
 
-    const { tutorId, scheduleSlotIds, subject, contactPhone, message} = validation.data
+    const { tutorId, scheduleSlotIds, subject, contactPhone, message, lessonDate} = validation.data
 
 
 
@@ -36,6 +37,7 @@ export async function createBookingRequest(prevState: TutorActionState | void, f
         p_subject: subject,
         p_contact_phone: contactPhone,
         p_message: message || null,
+        p_lesson_date: lessonDate || null,
     })
 
     if(error){

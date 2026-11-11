@@ -2,10 +2,12 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, 
   UserCheck, 
   Calendar, 
+  BookOpen,
   FileText, 
   MessageSquare, 
   Wallet, 
@@ -16,15 +18,19 @@ import {
 } from 'lucide-react';
 import { logout } from '@/src/modules/auth/actions/auth';
 
+const baseLink = 'flex items-center justify-between px-4 py-3 rounded-xl font-semibold text-sm transition-colors';
+const activeLink = 'bg-blue-50 text-blue-600 font-bold';
+const idleLink = 'text-slate-600 hover:bg-slate-50 hover:text-blue-600';
+
 export default function TutorDashboardSidebar() {
+  const pathname = usePathname();
+  const linkCls = (href: string) => `${baseLink} ${pathname === href ? activeLink : idleLink}`;
+
   return (
     <aside className="hidden lg:flex flex-col w-64 min-h-[calc(100vh-64px)] bg-white border-r border-slate-100 p-4 gap-2 shrink-0">
       
       {/* 1. TỔNG QUAN */}
-      <Link
-        href="/dashboard/tutor"
-        className="flex items-center justify-between px-4 py-3 rounded-xl bg-blue-50 text-blue-600 font-bold text-sm transition-colors"
-      >
+      <Link href="/dashboard/tutor" className={linkCls('/dashboard/tutor')}>
         <span className="flex items-center gap-3">
           <LayoutDashboard className="size-5" />
           <span>Tổng quan</span>
@@ -32,10 +38,7 @@ export default function TutorDashboardSidebar() {
       </Link>
 
       {/* 2. HỒ SƠ GIA SƯ */}
-      <Link
-        href="/dashboard/profiletutor"
-        className="flex items-center justify-between px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-blue-600 font-semibold text-sm transition-colors"
-      >
+      <Link href="/dashboard/profiletutor" className={linkCls('/dashboard/profiletutor')}>
         <span className="flex items-center gap-3">
           <UserCheck className="size-5 text-slate-500" />
           <span>Hồ sơ gia sư</span>
@@ -43,49 +46,31 @@ export default function TutorDashboardSidebar() {
       </Link>
 
       {/* 3. LỊCH DẠY */}
-      <Link
-        href="#lich"
-        className="flex items-center justify-between px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-blue-600 font-semibold text-sm transition-colors"
-      >
+      <Link href="/dashboard/schedule" className={linkCls('/dashboard/schedule')}>
         <span className="flex items-center gap-3">
           <Calendar className="size-5 text-slate-500" />
           <span>Lịch dạy</span>
         </span>
       </Link>
+      <Link href="/dashboard/lesson" className={linkCls('/dashboard/lesson')}>
+        <span className="flex items-center gap-3">
+          <BookOpen className="size-5" />
+          <span>Buổi học</span>
+        </span>
+      </Link>
 
       {/* 4. YÊU CẦU HỌC */}
-      <Link
-        href="#yeu-cau"
-        className="flex items-center justify-between px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-blue-600 font-semibold text-sm transition-colors"
-      >
+      <Link href="/dashboard/requests" className={linkCls('/dashboard/requests')}>
         <span className="flex items-center gap-3">
           <FileText className="size-5 text-slate-500" />
           <span>Yêu cầu học</span>
         </span>
-        <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-xs font-bold flex items-center justify-center">
-          3
-        </span>
       </Link>
 
-      {/* 5. TIN NHẮN */}
-      <Link
-        href="#tin-nhan"
-        className="flex items-center justify-between px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-blue-600 font-semibold text-sm transition-colors"
-      >
-        <span className="flex items-center gap-3">
-          <MessageSquare className="size-5 text-slate-500" />
-          <span>Tin nhắn</span>
-        </span>
-        <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-xs font-bold flex items-center justify-center">
-          5
-        </span>
-      </Link>
+      
 
       {/* 6. DOANH THU */}
-      <Link
-        href="#doanh-thu"
-        className="flex items-center justify-between px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-blue-600 font-semibold text-sm transition-colors"
-      >
+      <Link href="/dashboard/revenue" className={linkCls('/dashboard/revenue')}>
         <span className="flex items-center gap-3">
           <Wallet className="size-5 text-slate-500" />
           <span>Doanh thu</span>
@@ -93,21 +78,21 @@ export default function TutorDashboardSidebar() {
       </Link>
 
       {/* 7. ĐÁNH GIÁ */}
-      <Link
-        href="#danh-gia"
-        className="flex items-center justify-between px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-blue-600 font-semibold text-sm transition-colors"
-      >
+      <Link href="/dashboard/reviews" className={linkCls('/dashboard/reviews')}>
         <span className="flex items-center gap-3">
           <Star className="size-5 text-slate-500" />
           <span>Đánh giá</span>
         </span>
       </Link>
+      {/* <Link href="/dashboard/reviews" className={linkCls('/dashboard/reviews')}>
+        <span className="flex items-center gap-3">
+          <Star className="size-5" />
+          <span>Đánh giá</span>
+        </span>
+      </Link> */}
 
       {/* 8. CÀI ĐẶT */}
-      <Link
-        href="#cai-dat"
-        className="flex items-center justify-between px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 hover:text-blue-600 font-semibold text-sm transition-colors"
-      >
+      <Link href="/dashboard/settings" className={linkCls('/dashboard/settings')}>
         <span className="flex items-center gap-3">
           <Settings className="size-5 text-slate-500" />
           <span>Cài đặt</span>
@@ -125,7 +110,7 @@ export default function TutorDashboardSidebar() {
         </button>
       </form>
 
-      {/* KHU VỰC HỖ TRỢ BÊN DƯỚI */}
+      {/* KHU VỰC HỖ TRỢ */}
       <div className="mt-auto border border-slate-100 rounded-2xl p-4 bg-slate-50/70 text-sm text-slate-500 space-y-2">
         <b className="text-slate-800 font-bold block text-sm">Cần hỗ trợ?</b>
         <p className="text-xs text-slate-500 leading-relaxed">
@@ -133,7 +118,7 @@ export default function TutorDashboardSidebar() {
         </p>
         <button 
           type="button"
-          className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-blue-600 text-blue-600 hover:bg-blue-50 font-bold text-xs transition-colors"
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-blue-600 text-blue-600 hover:bg-blue-50 font-bold text-xs transition-colors cursor-pointer"
         >
           <Headphones className="size-4" />
           <span>Liên hệ ngay</span>
