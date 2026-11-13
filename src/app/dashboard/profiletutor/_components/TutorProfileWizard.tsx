@@ -475,7 +475,7 @@ export default function TutorProfileWizard({ data, formAction, isPending, state 
                 <b className="text-xs font-bold text-slate-800">Quá trình học tập (Educations)</b>
                 <button 
                   type="button" 
-                  onClick={() => setEducations([...educations, { id: Date.now().toString(), period: '', schoolName: '', major: '', status: '', description: '' }])}
+                  onClick={() => setEducations([...educations, { id: Date.now().toString(), period: '', schoolName: '', major: '',gpa: '', status: '', description: '' }])}
                   className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline cursor-pointer"
                 >
                   <Plus className="size-3.5" /> Thêm quá trình học
@@ -495,6 +495,20 @@ export default function TutorProfileWizard({ data, formAction, isPending, state 
                     <input className={inputCls} placeholder="Tên trường học" value={edu.schoolName} onChange={e => { const u = [...educations]; u[idx].schoolName = e.target.value; setEducations(u); }} />
                     <input className={inputCls} placeholder="Chuyên ngành" value={edu.major} onChange={e => { const u = [...educations]; u[idx].major = e.target.value; setEducations(u); }} />
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input 
+                      className={inputCls} 
+                      placeholder="Điểm GPA (VD: 3.65/4.0 - tùy chọn)" 
+                      value={edu.gpa || ''} 
+                      onChange={e => { const u = [...educations]; u[idx].gpa = e.target.value; setEducations(u); }} 
+                    />
+                    <input 
+                      className={inputCls} 
+                      placeholder="Trạng thái (VD: Đang theo học / Đã tốt nghiệp)" 
+                      value={edu.status || ''} 
+                      onChange={e => { const u = [...educations]; u[idx].status = e.target.value; setEducations(u); }} 
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -504,7 +518,7 @@ export default function TutorProfileWizard({ data, formAction, isPending, state 
                 <b className="text-xs font-bold text-slate-800">Bằng cấp & Chứng chỉ (Certificates)</b>
                 <button 
                   type="button" 
-                  onClick={() => setCertificates([...certificates, { id: Date.now().toString(), title: '', issuedBy: '', issuedYear: '', imageUrl: '', isVerified: false }])}
+                  onClick={() => setCertificates([...certificates, { id: Date.now().toString(), title: '', detail: '', issuedBy: '', issuedYear: '', imageUrl: '', isVerified: false }])}
                   className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline cursor-pointer"
                 >
                   <Plus className="size-3.5" /> Thêm chứng chỉ
@@ -524,6 +538,12 @@ export default function TutorProfileWizard({ data, formAction, isPending, state 
                     <input className={inputCls} placeholder="Nơi cấp (VD: British Council)" value={cert.issuedBy} onChange={e => { const u = [...certificates]; u[idx].issuedBy = e.target.value; setCertificates(u); }} />
                     <input className={inputCls} placeholder="Năm cấp (VD: 2024)" value={cert.issuedYear} onChange={e => { const u = [...certificates]; u[idx].issuedYear = e.target.value; setCertificates(u); }} />
                   </div>
+                  <textarea 
+                    className={`${inputCls} h-16 resize-none`} 
+                    placeholder="Mô tả chi tiết chứng chỉ (VD: Điểm thành phần, xếp loại hoặc nội dung đạt được - tùy chọn)..." 
+                    value={cert.detail || ''} 
+                    onChange={e => { const u = [...certificates]; u[idx].detail = e.target.value; setCertificates(u); }} 
+                  />
 
                   <div className="space-y-2">
                     <label className="block text-xs font-semibold text-slate-700">Ảnh minh chứng bằng cấp / chứng chỉ</label>

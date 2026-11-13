@@ -444,8 +444,8 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
           is_online: raw.is_online ?? true,
           is_verified: raw.is_verified ?? false,
           total_lessons_taught: raw.total_lessons_taught || 0,
-          rating_avg: Number(raw.rating_avg) || 0,
-          rating_count: raw.rating_count || 0,
+          rating_avg: 0,
+          rating_count: 0,
           school_name: raw.school_name || '',
           education: raw.education || '',
           experiences: parseJsonSafely<Experience>(raw.experiences),
@@ -474,12 +474,35 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
           .order('created_at', { ascending: false })
           .limit(20);
         if (cancelled) return;
-        setReviews(
-          (rv ?? []).map((r) => {
-            const st = Array.isArray(r.student) ? r.student[0] : r.student;
-            return { id: r.id, rating: r.rating, comment: r.comment, created_at: r.created_at, name: st?.full_name || 'Học viên' };
-          }),
+        const mappedReviews = (rv ?? []).map((r) => {
+          const st = Array.isArray(r.student) ? r.student[0] : r.student;
+          return {
+            id: r.id,
+            rating: r.rating,
+            comment: r.comment,
+            created_at: r.created_at,
+            name: st?.full_name || 'Học viên',
+          };
+        });
+
+        setReviews(mappedReviews);
+
+        const totalReviews = mappedReviews.length;
+        const avgRating =
+          totalReviews > 0
+            ? mappedReviews.reduce((sum, item) => sum + Number(item.rating || 0), 0) / totalReviews
+            : 0;
+
+        setTutor((prev) =>
+          prev ? { ...prev, rating_count: totalReviews, rating_avg: avgRating } : null
         );
+
+        // setReviews(
+        //   (rv ?? []).map((r) => {
+        //     const st = Array.isArray(r.student) ? r.student[0] : r.student;
+        //     return { id: r.id, rating: r.rating, comment: r.comment, created_at: r.created_at, name: st?.full_name || 'Học viên' };
+        //   }),
+        // );
       } catch (err) {
         console.error('Lỗi fetch dữ liệu gia sư:', err);
         if (!cancelled) setTutor(null);
@@ -732,7 +755,6 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
 
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     
-                    {/* TRẠNG THÁI 1: CHƯA GỬI YÊU CẦU (Default) */}
                     {(!existingRequest || existingRequest.status === null) && (
                       <button
                         type="button"
@@ -744,7 +766,6 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                       </button>
                     )}
 
-                    {/* TRẠNG THÁI 2: ĐÃ GỬI (Pending) - Hiển thị Cụm 2 nút (Đang chờ + Hủy) */}
                     {existingRequest?.status === 'Pending' && (
                       <div className="flex flex-1 flex-wrap items-center gap-2">
                         <button
@@ -766,7 +787,6 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                       </div>
                     )}
 
-                    {/* TRẠNG THÁI 3: BỊ TỪ CHỐI (Rejected) - Cho phép mở Modal để nộp lại */}
                     {existingRequest?.status === 'Rejected' && (
                       <div className="w-full space-y-2">
                         <button
@@ -785,7 +805,6 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                       </div>
                     )}
 
-                    {/* TRẠNG THÁI 4: ĐƯỢC CHẤP NHẬN (Accepted) - Mở Modal xem SĐT/Tên */}
                     {existingRequest?.status === 'Accepted' && (
                       <button
                         type="button"
@@ -796,7 +815,6 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                       </button>
                     )}
 
-                    {/* Nút Phụ: Lưu & Chia sẻ */}
                     <button type="button" 
                             onClick={handleToggleSave}
                             disabled= {isSaving}
@@ -959,6 +977,7 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                                   <h4 className="text-sm font-bold text-slate-900">{e.school || e.schoolName}</h4>
                                   {(e.degree || e.major) && <p className="mt-0.5 text-xs text-slate-600">{e.degree || e.major}</p>}
                                   {e.detail && <p className="mt-0.5 text-xs text-slate-600">{e.detail}</p>}
+                                  {e.gpa && <p className="mt-0.5 text-xs font-semibold text-slate-700">GPA: {e.gpa}</p>}
                                 </div>
                                 {e.status && <span className="shrink-0 rounded-full bg-blue-50 px-3 py-1 text-[11px] font-medium text-blue-600">{e.status}</span>}
                               </div>

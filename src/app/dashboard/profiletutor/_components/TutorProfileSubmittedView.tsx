@@ -633,9 +633,18 @@ export default function TutorProfileSubmittedView({ data, status = 'pending', on
                   {educations.map((edu, i) => (
                     <li key={i} className="relative rounded-xl bg-slate-50/70 p-4">
                       <span className="absolute -left-[31px] top-5 size-3 rounded-full border-2 border-white bg-blue-600 ring-2 ring-blue-200" />
-                      <p className="text-xs font-semibold text-blue-600">{edu.period || 'Chưa rõ thời gian'}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                         <p className="text-xs font-semibold text-blue-600">{edu.period || 'Chưa rõ thời gian'}</p>
+                         {edu.status && (
+                          <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200/80">
+                            {edu.status}
+                          </span>
+                        )}
+
+                      </div>
                       <b className="mt-0.5 block text-sm text-slate-900">{edu.schoolName}</b>
-                      {edu.major && <p className="text-xs text-slate-600">Chuyên ngành: {edu.major}</p>}
+                      {edu.major && <p className="text-xs font-semibold text-slate-700">Chuyên ngành: {edu.major}</p>}
+                      {edu.gpa && <p className="text-xs font-semibold text-slate-700">Điểm GPA: {edu.gpa}</p>}
                     </li>
                   ))}
                 </ol>
