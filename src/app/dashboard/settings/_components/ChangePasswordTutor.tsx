@@ -19,7 +19,6 @@ export default function ChangePasswordManager() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Đánh giá độ mạnh mật khẩu mới
   const getPasswordStrength = (pass: string) => {
     if (!pass) return { label: '', color: '', percent: 0 };
     if (pass.length < 6) return { label: 'Yếu (Tối thiểu 6 ký tự)', color: 'bg-rose-500 text-rose-700', percent: 30 };

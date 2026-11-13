@@ -7,7 +7,31 @@ function getHomePath(role: string) {
     return '/'
 }
 export async function middleware(request: NextRequest) {
-  
+    const pathname = request.nextUrl.pathname
+
+    const protectedRoutes = ['/dashboard', '/profile', '/admin']
+    const authRoutes = ['/login', '/register', '/forgot-password', '/reset-password']
+
+    const isProtectedRoute = protectedRoutes.some((path) => pathname.startsWith(path))
+    const isAuthRoute = authRoutes.some((path) => pathname.startsWith(path))
+    const isHomeRoute = pathname === '/'
+
+
+
+    if (!isProtectedRoute && !isAuthRoute && !isHomeRoute) {
+        return NextResponse.next({request})
+    }
+    const hasAuthCookie = request.cookies.getAll().some(cookie => cookie.name.startsWith('sb-'))
+    if (!hasAuthCookie) {
+        if (isProtectedRoute) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/login'
+            url.searchParams.set('redirectTo', pathname)
+            return NextResponse.redirect(url)
+        }
+        return NextResponse.next({ request })
+    }
+
     let supabaseResponse = NextResponse.next({ request })
 
     const supabase = createServerClient(
@@ -29,20 +53,6 @@ export async function middleware(request: NextRequest) {
         }
     )
 
-    const pathname = request.nextUrl.pathname
-
-    const protectedRoutes = ['/dashboard', '/profile', '/admin']
-    const authRoutes = ['/login', '/register', '/forgot-password', '/reset-password']
-
-    const isProtectedRoute = protectedRoutes.some((path) => pathname.startsWith(path))
-    const isAuthRoute = authRoutes.some((path) => pathname.startsWith(path))
-
-
-    const isHomeRoute = pathname === '/'
-
-    if (!isProtectedRoute && !isAuthRoute && !isHomeRoute) {
-        return supabaseResponse
-    }
 
     const { data: { user } } = await supabase.auth.getUser()
     if(isHomeRoute && !user){

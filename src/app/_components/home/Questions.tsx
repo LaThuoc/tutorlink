@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { ChevronDown, Mail } from "lucide-react";
 
-// Danh sách các câu hỏi thường gặp
 const FAQS = [
   {
     q: "Đăng ký tài khoản có mất phí không?",
