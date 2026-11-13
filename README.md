@@ -49,74 +49,140 @@ Hệ thống cung cấp sẵn tài khoản quản trị để kiểm thử đầ
 
 ---
 
-## Sơ đồ Cơ sở Dữ liệu (ERD)
+## Cấu trúc Cơ sở Dữ liệu
 
-Cơ sở dữ liệu được triển khai trên PostgreSQL với các bảng chính liên kết thông qua khóa ngoại và ràng buộc toàn vẹn:
+Hệ thống triển khai trên PostgreSQL (Supabase) gồm 8 bảng dữ liệu chính, được bảo vệ bằng Row Level Security (RLS) và các Database Triggers chống leo thang đặc quyền (`protect_profile_role`, `protect_tutor_status`):
 
-```mermaid
-erDiagram
-    AUTH_USERS ||--|| PROFILES : "1-1 (id)"
-    PROFILES ||--o| TUTOR_PROFILES : "1-1 (user_id)"
-    PROFILES ||--o{ BOOKINGS : "student_id"
-    PROFILES ||--o{ BOOKINGS : "tutor_id"
-    PROFILES ||--o{ REVIEWS : "student_id"
-    PROFILES ||--o{ REVIEWS : "tutor_id"
+### 1. Bảng `profiles`
+| Tên cột | Kiểu dữ liệu | Ràng buộc |
+| :--- | :--- | :--- |
+| `id` | `uuid` | `PK, FK -> auth.users(id)` |
+| `full_name` | `text` | `NOT NULL` |
+| `email` | `text` | `NOT NULL` |
+| `avatar_url` | `text` | `NULL` |
+| `phone` | `text` | `NULL` |
+| `role` | `text` | `DEFAULT 'student', CHECK ('student', 'tutor', 'admin')` |
+| `status` | `text` | `DEFAULT 'active', CHECK ('active', 'blocked', 'pending')` |
+| `province` | `text` | `NULL` |
+| `district` | `text` | `NULL` |
+| `address` | `text` | `NULL` |
+| `gender` | `text` | `NULL` |
+| `date_of_birth` | `text` | `NULL` |
+| `hometown` | `text` | `NULL` |
+| `created_at` | `timestamptz` | `DEFAULT now()` |
+| `updated_at` | `timestamptz` | `DEFAULT now()` |
 
-    PROFILES {
-        uuid id PK "FK -> auth.users(id)"
-        text full_name
-        text email
-        text avatar_url
-        text phone
-        text role "student | tutor | admin"
-        text province
-        text district
-        text address
-        text gender
-        text date_of_birth
-        timestamptz created_at
-    }
+### 2. Bảng `tutor_profiles`
+| Tên cột | Kiểu dữ liệu | Ràng buộc |
+| :--- | :--- | :--- |
+| `id` | `uuid` | `PK, DEFAULT gen_random_uuid()` |
+| `user_id` | `uuid` | `UNIQUE, NOT NULL, FK -> profiles(id)` |
+| `bio` | `text` | `NULL` |
+| `headline` | `text` | `NULL` |
+| `quote` | `text` | `NULL` |
+| `subjects` | `text[]` | `DEFAULT '{}', GIN INDEX` |
+| `grades` | `text[]` | `DEFAULT '{}'` |
+| `hourly_rate` | `numeric` | `DEFAULT 0, BTREE INDEX` |
+| `address` | `text` | `NULL` |
+| `is_online` | `boolean` | `DEFAULT true` |
+| `experience_years` | `integer` | `DEFAULT 0` |
+| `status` | `text` | `DEFAULT 'pending', CHECK ('pending', 'approved', 'rejected')` |
+| `verification_status` | `text` | `DEFAULT 'Draft', CHECK ('Draft', 'Pending', 'Approved', 'Rejected')` |
+| `is_verified` | `boolean` | `DEFAULT false, BTREE INDEX` |
+| `is_completed` | `boolean` | `DEFAULT false` |
+| `rejection_reason` | `text` | `NULL` |
+| `school_name` | `text` | `NULL` |
+| `education` | `text` | `NULL` |
+| `teaching_modes` | `text[]` | `DEFAULT '{}'` |
+| `teaching_areas` | `text[]` | `DEFAULT '{}'` |
+| `achievements` | `text[]` | `DEFAULT '{}'` |
+| `skills` | `text[]` | `DEFAULT '{}'` |
+| `schedules` | `text[]` | `DEFAULT '{}'` |
+| `certificates` | `text[]` | `DEFAULT '{}'` |
+| `total_lessons_taught` | `integer` | `DEFAULT 0` |
+| `subject_details` | `jsonb` | `DEFAULT '[]'` |
+| `experiences` | `jsonb` | `DEFAULT '[]'` |
+| `educations` | `jsonb` | `DEFAULT '[]'` |
+| `certificates_data` | `jsonb` | `DEFAULT '[]'` |
+| `schedules_data` | `jsonb` | `DEFAULT '[]'` |
+| `created_at` | `timestamptz` | `DEFAULT now()` |
+| `updated_at` | `timestamptz` | `DEFAULT now()` |
 
-    TUTOR_PROFILES {
-        uuid id PK
-        uuid user_id UK "FK -> profiles(id)"
-        text headline
-        text bio
-        text[] subjects
-        text[] grades
-        numeric hourly_rate
-        boolean is_online
-        integer experience_years
-        text status "pending | approved | rejected"
-        text verification_status "Draft | Pending | Approved | Rejected"
-        boolean is_verified
-        text school_name
-        text[] teaching_modes
-        jsonb subject_details
-        jsonb experiences
-        jsonb educations
-        jsonb certificates_data
-        jsonb schedules_data
-        text rejection_reason
-    }
+### 3. Bảng `booking_requests`
+| Tên cột | Kiểu dữ liệu | Ràng buộc |
+| :--- | :--- | :--- |
+| `id` | `uuid` | `PK, DEFAULT gen_random_uuid()` |
+| `student_id` | `uuid` | `NOT NULL, FK -> profiles(id)` |
+| `tutor_id` | `uuid` | `NOT NULL, FK -> profiles(id)` |
+| `subject` | `text` | `NOT NULL` |
+| `message` | `text` | `NULL` |
+| `contact_phone` | `text` | `NOT NULL` |
+| `schedule_slot_id` | `text` | `NULL` |
+| `lesson_date` | `date` | `NULL` |
+| `status` | `text` | `DEFAULT 'Pending', CHECK ('Pending', 'Accepted', 'Rejected', 'Cancelled', 'Completed')` |
+| `lesson_status` | `text` | `DEFAULT 'Pending', CHECK ('Pending', 'Completed', 'Cancelled')` |
+| `rejection_reason` | `text` | `NULL` |
+| `is_paid` | `boolean` | `DEFAULT false` |
+| `paid_at` | `timestamptz` | `NULL` |
+| `created_at` | `timestamptz` | `DEFAULT now()` |
+| `updated_at` | `timestamptz` | `DEFAULT now()` |
 
-    BOOKINGS {
-        uuid id PK
-        uuid student_id FK "FK -> profiles(id)"
-        uuid tutor_id FK "FK -> profiles(id)"
-        text subject
-        text schedule
-        text mode "online | offline"
-        text status "pending | accepted | rejected | completed"
-        text note
-        timestamptz created_at
-    }
+### 4. Bảng `lessons`
+| Tên cột | Kiểu dữ liệu | Ràng buộc |
+| :--- | :--- | :--- |
+| `id` | `uuid` | `PK, DEFAULT gen_random_uuid()` |
+| `booking_id` | `uuid` | `NOT NULL, FK -> booking_requests(id)` |
+| `tutor_id` | `uuid` | `NOT NULL, FK -> profiles(id)` |
+| `student_id` | `uuid` | `NOT NULL, FK -> profiles(id)` |
+| `subject` | `text` | `NOT NULL` |
+| `lesson_date` | `date` | `NOT NULL` |
+| `start_time` | `time` | `NULL` |
+| `end_time` | `time` | `NULL` |
+| `schedule_text` | `text` | `NULL` |
+| `status` | `text` | `DEFAULT 'Scheduled'` |
+| `is_paid` | `boolean` | `DEFAULT false` |
+| `created_at` | `timestamptz` | `DEFAULT now()` |
 
-    REVIEWS {
-        uuid id PK
-        uuid student_id FK "FK -> profiles(id)"
-        uuid tutor_id FK "FK -> profiles(id)"
-        integer rating "1..5"
-        text comment
-        timestamptz created_at
-    }
+### 5. Bảng `certificate_requests`
+| Tên cột | Kiểu dữ liệu | Ràng buộc |
+| :--- | :--- | :--- |
+| `id` | `uuid` | `PK, DEFAULT gen_random_uuid()` |
+| `tutor_id` | `uuid` | `NOT NULL, FK -> tutor_profiles(user_id)` |
+| `certificate_url` | `text` | `NOT NULL` |
+| `title` | `text` | `NULL` |
+| `issued_by` | `text` | `NULL` |
+| `issue_year` | `text` | `NULL` |
+| `detail` | `text` | `NULL` |
+| `status` | `text` | `DEFAULT 'Pending', CHECK ('Pending', 'Approved', 'Rejected')` |
+| `rejection_reason` | `text` | `NULL` |
+| `created_at` | `timestamptz` | `DEFAULT timezone('utc', now())` |
+
+### 6. Bảng `reviews`
+| Tên cột | Kiểu dữ liệu | Ràng buộc |
+| :--- | :--- | :--- |
+| `id` | `uuid` | `PK, DEFAULT gen_random_uuid()` |
+| `student_id` | `uuid` | `NOT NULL, UNIQUE(student_id, tutor_id), FK -> profiles(id)` |
+| `tutor_id` | `uuid` | `NOT NULL, UNIQUE(student_id, tutor_id), FK -> profiles(id)` |
+| `rating` | `integer` | `NOT NULL, CHECK (1 <= rating <= 5)` |
+| `comment` | `text` | `NULL` |
+| `created_at` | `timestamptz` | `DEFAULT now()` |
+
+### 7. Bảng `saved_tutors`
+| Tên cột | Kiểu dữ liệu | Ràng buộc |
+| :--- | :--- | :--- |
+| `id` | `uuid` | `PK, DEFAULT gen_random_uuid()` |
+| `student_id` | `uuid` | `NOT NULL, UNIQUE(student_id, tutor_id), FK -> profiles(id)` |
+| `tutor_id` | `uuid` | `NOT NULL, UNIQUE(student_id, tutor_id), FK -> profiles(id)` |
+| `created_at` | `timestamptz` | `DEFAULT now()` |
+
+### 8. Bảng `contact_messages`
+| Tên cột | Kiểu dữ liệu | Ràng buộc |
+| :--- | :--- | :--- |
+| `id` | `uuid` | `PK, DEFAULT gen_random_uuid()` |
+| `user_id` | `uuid` | `NULL, FK -> profiles(id) ON DELETE SET NULL` |
+| `name` | `text` | `NOT NULL` |
+| `email` | `text` | `NOT NULL` |
+| `subject` | `text` | `NOT NULL` |
+| `message` | `text` | `NOT NULL` |
+| `status` | `text` | `DEFAULT 'pending', CHECK ('pending', 'processing', 'resolved', 'archived')` |
+| `created_at` | `timestamptz` | `DEFAULT timezone('utc', now())` |
