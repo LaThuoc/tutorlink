@@ -4,13 +4,11 @@ import { createClient } from "@/src/lib/supabase/server";
 async function getStatsData() {
   const supabase = await createClient();
 
-  // 1. Đếm tổng số gia sư đã duyệt (Approved)
   const { count: tutorCount } = await supabase
     .from("tutor_profiles")
     .select("*", { count: "exact", head: true })
     .eq("verification_status", "Approved");
 
-  // 2. Lấy dữ liệu đánh giá từ bảng reviews
   const { data: reviews } = await supabase
     .from("reviews")
     .select("rating");
@@ -21,7 +19,6 @@ async function getStatsData() {
     avgRating = (totalRating / reviews.length).toFixed(1);
   }
 
-  // 3. Đếm tổng số gia sư đã xác minh (is_verified = true)
   const { count: verifiedCount } = await supabase
     .from("tutor_profiles")
     .select("*", { count: "exact", head: true })
@@ -63,7 +60,6 @@ export async function StatsBand() {
 
   return (
     <section className="w-full bg-white py-6">
-      {/* Khung lề ĐỒNG BỘ HOÀN TOÀN với Hero & FeaturedTutors */}
       <div className="mx-auto w-full max-w-[1920px] px-5 sm:px-8 lg:px-10 xl:px-14 2xl:px-20">
         <dl className="grid gap-y-6 rounded-2xl bg-blue-50/70 border border-blue-100/60 px-6 py-6 sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-blue-100">
           {stats.map(({ icon: Icon, value, label }) => (

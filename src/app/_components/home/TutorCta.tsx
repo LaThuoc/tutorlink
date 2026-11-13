@@ -12,23 +12,17 @@ const BENEFITS = [
 
 export function TutorCta() {
   return (
-    /* LỚP NỀN FULL-WIDTH (Bleed Background) */
     <section className="w-full bg-white py-12 sm:py-16">
       
-      {/* KHUNG NỘI DUNG CHUẨN MAX-WIDTH 1920PX */}
       <div className="mx-auto w-full max-w-[1920px] px-5 sm:px-8 lg:px-10 xl:px-14 2xl:px-20">
         
-        {/* BANNER MAIN CONTAINER */}
         <div className="relative overflow-hidden rounded-[36px] bg-gradient-to-br from-[#1E40AF] via-[#1D4ED8] to-[#0B132B] px-6 pt-10 text-white sm:px-12 sm:pt-14 lg:px-16 lg:pt-16 shadow-2xl shadow-blue-900/20">
           
-          {/* Đốm mờ nghệ thuật làm phông nền (Background Lighting) */}
           <div className="pointer-events-none absolute -left-20 -top-20 size-96 rounded-full bg-blue-400/20 blur-3xl" />
           <div className="pointer-events-none absolute right-10 top-10 size-96 rounded-full bg-cyan-400/20 blur-3xl" />
 
-          {/* LƯỚI GRID 2 CỘT CÂN BẰNG 6 - 6 */}
           <div className="relative z-10 grid items-end gap-8 lg:grid-cols-12">
             
-            {/* CỘT TRÁI: NỘI DUNG (Chiếm 6 cột)[cite: 1] */}
             <div className="pb-10 lg:col-span-6 lg:pb-16">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-blue-200 backdrop-blur-md mb-5">
                 <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -40,7 +34,6 @@ export function TutorCta() {
                 và nâng cao thu nhập?
               </h2>
 
-              {/* Danh sách lợi ích[cite: 1] */}
               <ul className="mb-10 mt-7 space-y-4">
                 {BENEFITS.map((benefit) => (
                   <li key={benefit} className="flex items-start gap-3.5">
@@ -54,10 +47,9 @@ export function TutorCta() {
                 ))}
               </ul>
 
-              {/* Cụm nút bấm hành động[cite: 1] */}
               <div className="flex flex-wrap items-center gap-4">
                 <Link 
-                  href="/dashboard/tutor/onboarding" 
+                  href="/register" 
                   className="group inline-flex h-[54px] items-center justify-center gap-2 rounded-2xl bg-white px-8 font-bold text-blue-900 shadow-xl shadow-black/10 transition-all duration-300 hover:bg-blue-50 hover:shadow-2xl hover:-translate-y-0.5 active:scale-95"
                 >
                   <span>Đăng ký làm gia sư</span>
@@ -65,7 +57,7 @@ export function TutorCta() {
                 </Link>
                 
                 <Link 
-                  href="/guide/profile" 
+                  href="" 
                   className="inline-flex h-[54px] items-center justify-center rounded-2xl border border-white/25 bg-white/5 px-7 font-semibold text-white backdrop-blur-sm transition-all duration-300 hover:bg-white/15 hover:border-white/40 active:scale-95"
                 >
                   Xem hướng dẫn

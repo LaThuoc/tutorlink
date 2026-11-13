@@ -12,6 +12,38 @@ import { deleteAcceptedLessons } from '@/src/modules/tutor/deletePageTutor';
 interface Props {
   initialLessons: BookingRequestItem[];
 }
+const VN_DAY_NAMES: Record<number, string> = {
+  0: 'Chủ nhật',
+  1: 'Thứ 2',
+  2: 'Thứ 3',
+  3: 'Thứ 4',
+  4: 'Thứ 5',
+  5: 'Thứ 6',
+  6: 'Thứ 7',
+};
+
+function formatScheduleSlotSummary(rawSlotId: string | null | undefined): string {
+  if (!rawSlotId) return 'Thỏa thuận trực tiếp';
+
+  return rawSlotId
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((item) => {
+      if (item.includes('|')) {
+        const [datePart, timePart] = item.split('|').map((p) => p.trim());
+        const d = new Date(`${datePart}T00:00:00Z`);
+        if (!isNaN(d.getTime())) {
+          const dayName = VN_DAY_NAMES[d.getUTCDay()] || '';
+          return timePart ? `${dayName} (${timePart})` : dayName;
+        }
+        return timePart || item;
+      }
+      return item;
+    })
+    .join(', ');
+}
+
 
 export default function TutorLessonManager({ initialLessons }: Props) {
   const [lessons, setLessons] = useState<BookingRequestItem[]>(initialLessons);
@@ -227,7 +259,7 @@ export default function TutorLessonManager({ initialLessons }: Props) {
                 <div className="space-y-2 bg-slate-50/70 p-3.5 rounded-2xl border border-slate-100 text-xs">
                   <div className="flex items-center gap-2">
                     <Calendar className="size-4 text-blue-600 shrink-0" />
-                    <span>Lịch đăng ký: <b>{item.schedule_slot_id || 'Thỏa thuận trực tiếp'}</b></span>
+                    <span>Lịch đăng ký: <b>{formatScheduleSlotSummary(item.schedule_slot_id) }</b></span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Phone className="size-4 text-emerald-600 shrink-0" />

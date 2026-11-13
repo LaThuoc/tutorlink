@@ -35,10 +35,28 @@ export default function AdminCertificatesPage() {
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState('');
 
+  const [successMsg, setSuccessMsg] = useState('');
+  const [rejectModalError, setRejectModalError] = useState('');
+  const [approvingItem, setApprovingItem] = useState<CertRequest | null>(null);
+
+
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const [rejectingItem, setRejectingItem] = useState<CertRequest | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
+
+
+  useEffect(() => {
+    if (!successMsg) return;
+    const timer = setTimeout(() => setSuccessMsg(''), 5000);
+    return () => clearTimeout(timer);
+  }, [successMsg]);
+
+  useEffect(() => {
+    if (!errorMsg) return;
+    const timer = setTimeout(() => setErrorMsg(''), 5000);
+    return () => clearTimeout(timer);
+  }, [errorMsg]);
 
   useEffect(() => {
     let isMounted = true;
@@ -65,29 +83,39 @@ export default function AdminCertificatesPage() {
     };
   }, []);
 
-  const handleApprove = (item: CertRequest) => {
+    const openApproveModal = (item: CertRequest) => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    setApprovingItem(item);
+  };
+
+  const confirmApprove = () => {
+    if (!approvingItem) return;
+
+    const item = approvingItem;
     const tutorName = item.tutor_profiles?.profiles?.full_name || 'Gia sư';
     const certTitle = item.title || 'bằng cấp';
-    
-    if (!confirm(`Bạn có chắc chắn muốn PHÊ DUYỆT chứng chỉ "${certTitle}" của ${tutorName}?`)) {
-      return;
-    }
 
     setErrorMsg('');
+    setSuccessMsg('');
     startTransition(async () => {
       const res = await processNewCertificateRequest(item.id, item.tutor_id, 'Approve');
       if (res.success) {
         setRequests((prev) => prev.filter((r) => r.id !== item.id));
+        setApprovingItem(null);
+        setSuccessMsg(`Đã phê duyệt chứng chỉ "${certTitle}" và cấp tích xanh xác minh cho ${tutorName}.`);
       } else {
         setErrorMsg(res.errors || 'Lỗi khi phê duyệt chứng chỉ');
+        setApprovingItem(null);
       }
     });
   };
 
   const confirmReject = () => {
     if (!rejectingItem) return;
+
     if (!rejectionReason.trim()) {
-      alert('Vui lòng nhập lý do từ chối để gia sư biết và cập nhật lại!');
+      setRejectModalError('Vui lòng nhập lý do từ chối để gia sư biết và cập nhật lại!');
       return;
     }
 
@@ -127,6 +155,13 @@ export default function AdminCertificatesPage() {
         <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-bold flex items-center gap-2">
           <AlertCircle className="size-4 shrink-0" />
           <span>{errorMsg}</span>
+        </div>
+      )}
+
+       {successMsg && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl text-xs font-bold flex items-center gap-2">
+          <CheckCircle2 className="size-4 shrink-0" />
+          <span>{successMsg}</span>
         </div>
       )}
 
@@ -235,6 +270,7 @@ export default function AdminCertificatesPage() {
                     onClick={() => {
                       setRejectingItem(item);
                       setRejectionReason('');
+                      setRejectModalError('')
                     }}
                     className="px-4 py-2.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
@@ -244,7 +280,7 @@ export default function AdminCertificatesPage() {
                   <button
                     type="button"
                     disabled={isPending}
-                    onClick={() => handleApprove(item)}
+                    onClick={() => openApproveModal(item)}
                     className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     {isPending ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
@@ -278,8 +314,63 @@ export default function AdminCertificatesPage() {
           </div>
         </div>
       )}
+       {approvingItem && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="size-5 text-emerald-600" />
+                Xác nhận phê duyệt chứng chỉ
+              </h3>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setApprovingItem(null)}
+                className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
 
-      {/* MODAL TỪ CHỐI CHỨNG CHỈ */}
+            <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 text-xs text-slate-600 space-y-2 leading-relaxed">
+              <p>
+                Bạn có chắc chắn muốn <strong className="text-emerald-700">PHÊ DUYỆT</strong> chứng chỉ{' '}
+                <strong className="text-slate-900">
+                  {`"${approvingItem.title || 'Bằng cấp / Chứng chỉ'}"`}
+                </strong>{' '}
+                của gia sư{' '}
+                <strong className="text-slate-900">
+                  {approvingItem.tutor_profiles?.profiles?.full_name || 'Gia sư'}
+                </strong>?
+              </p>
+              <p className="text-[11px] text-slate-500 pt-1 border-t border-emerald-200/60">
+                Sau khi xác nhận, hồ sơ gia sư sẽ được cấp <strong className="text-emerald-700">Tích xanh xác minh (Verified)</strong> trên toàn hệ thống.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setApprovingItem(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all cursor-pointer disabled:opacity-50"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={confirmApprove}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isPending ? <Loader2 className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                Xác nhận Phê duyệt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {rejectingItem && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
@@ -307,10 +398,18 @@ export default function AdminCertificatesPage() {
                 {rejectingItem.tutor_profiles?.profiles?.full_name || 'Gia sư'}
               </strong>:
             </p>
+             {rejectModalError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-bold flex items-center gap-2">
+                <AlertCircle className="size-4 shrink-0" />
+                <span>{rejectModalError}</span>
+              </div>
+            )}
 
             <textarea
               value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
+              onChange={(e) => {setRejectionReason(e.target.value);
+                if(rejectModalError) setRejectModalError('')
+              }}
               placeholder="Ví dụ: Ảnh chứng chỉ bị mờ, không nhìn rõ dấu đỏ hoặc thông tin không khớp..."
               className="w-full h-28 p-3.5 border border-slate-200 rounded-2xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all resize-none text-slate-800"
             />

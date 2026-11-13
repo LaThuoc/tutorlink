@@ -6,16 +6,14 @@ import {
   Sparkles, TrendingUp 
 } from 'lucide-react';
 
-export const revalidate = 0; // Luôn lấy dữ liệu mới nhất khi load trang
+export const revalidate = 0; 
 
 export default async function AdminDashboardPage() {
   const stats = await getAdminStats();
 
   return (
     <div className="space-y-8">
-      {/* 1. HERO BANNER SÁNG TẠO & SANG TRỌNG */}
       <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 p-8 lg:p-10 rounded-3xl text-white shadow-xl shadow-blue-500/10">
-        {/* Họa tiết trang trí chìm */}
         <div className="absolute -right-10 -bottom-10 size-64 bg-white/10 rounded-full blur-2xl pointer-events-none" />
         <div className="absolute right-40 top-0 size-32 bg-blue-400/20 rounded-full blur-xl pointer-events-none" />
 

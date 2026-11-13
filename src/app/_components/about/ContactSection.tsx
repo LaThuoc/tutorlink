@@ -4,7 +4,7 @@ import { ContactForm } from "./ContactForm";
 // TODO: thay bằng thông tin liên hệ thật
 const INFO: { icon: LucideIcon; label: string; value: string; href?: string }[] = [
   { icon: Mail, label: "Email hỗ trợ", value: "support@giasuhub.vn", href: "mailto:support@giasuhub.vn" },
-  { icon: Phone, label: "Hotline tư vấn", value: "0900 000 000", href: "tel:0900000000" },
+  { icon: Phone, label: "Hotline tư vấn", value: "1900 0000", href: "tel:090000000" },
   { icon: MapPin, label: "Địa chỉ văn phòng", value: "Hà Nội, Việt Nam" },
 ];
 
@@ -27,7 +27,6 @@ export function ContactSection() {
               Gửi tin nhắn cho chúng tôi, đội ngũ hỗ trợ sẽ phản hồi trong thời gian sớm nhất có thể.
             </p>
 
-            {/* Danh sách 3 thông tin liên hệ */}
             <ul className="mt-8 space-y-4">
               {INFO.map(({ icon: Icon, label, value, href }) => (
                 <li key={label} className="group flex items-center gap-4 rounded-2xl bg-slate-50/70 p-4 border border-slate-100 transition-all duration-300 hover:bg-blue-50/50 hover:border-blue-200/80">
@@ -49,7 +48,6 @@ export function ContactSection() {
             </ul>
           </div>
 
-          {/* Form liên hệ bên phải */}
         <ContactForm />
           
         </div>

@@ -55,3 +55,54 @@ export interface BookingRequestItem {
     phone?: string | null;
   };
 }
+
+
+
+export interface DashboardData {
+  tutorInfo: {
+    fullName: string;
+    initials: string;
+    subjects: string;
+    experienceYears: number;
+    totalLessons: number;
+    rating: number;
+    reviewCount: number;
+    isVerified: boolean;
+    verificationStatus: string;
+    completionPercentage: number;
+    hasExperiences: boolean;
+    hasEducations: boolean;
+    hasCertificates: boolean;
+  };
+  upcomingBookings: Array<{
+    id: string;
+    studentName: string;
+    subject: string;
+    scheduleText: string;
+  }>;
+  pendingRequests: Array<{
+    id: string;
+    studentName: string;
+    avatarText: string;
+    subject: string;
+    scheduleText: string;
+    createdAt: string;
+  }>;
+  stats: {
+    totalRevenue: number;
+    totalLessons: number;
+    pendingCount: number;
+    completedCount: number;
+    subjectStats: Array<{
+      subject: string;
+      count: number;
+      percent: number;
+    }>;
+  };
+  latestReview?: {
+    studentName: string;
+    rating: number;
+    createdAt: string;
+    comment: string;
+  };
+}

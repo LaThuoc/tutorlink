@@ -11,7 +11,7 @@ export type RequestedTutor = {
   subject: string;
   grade: string;
   status: 'pending' | 'accepted' | 'rejected';
-  rejection_reason?: string | null; // Cột lý do từ chối
+  rejection_reason?: string | null; 
   created_at: string;
   hourly_rate: number;
 };
@@ -146,7 +146,6 @@ export function RequestedTutorsModal({ isOpen, onClose, requests }: Props) {
           )}
         </div>
 
-        {/* Footer */}
         <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">
           <button
             onClick={onClose}

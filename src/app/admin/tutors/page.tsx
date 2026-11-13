@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useTransition } from 'react';
 import { processFirstTimeProfile } from '@/src/modules/auth/actions/admin';
 import { createClient } from '@/src/lib/supabase/client';
-import { UserCheck, Search, Loader2, AlertCircle } from 'lucide-react';
+import { UserCheck, Search, Loader2, AlertCircle, ShieldCheck, XCircle, CheckCircle2, X } from 'lucide-react';
 import { TutorDetailModal, TutorProfileData } from '../_components/TutorDetailModal';
 import { TutorCard } from '../_components/TutorCard';
 
@@ -12,12 +12,30 @@ export default function AdminTutorsPage() {
   const [loading, setLoading] = useState(true);
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [selectedTutor, setSelectedTutor] = useState<TutorProfileData | null>(null);
-
+  const [reviewModal, setReviewModal] = useState<{
+    tutorId: string;
+    tutorName: string;
+    action: 'Approve' | 'Reject';
+  } | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'APPROVED' | 'PENDING' | 'REJECTED'>('ALL');
 
   const supabase = createClient();
+
+  useEffect(() => {
+    if (!successMsg) return;
+    const timer = setTimeout(() => setSuccessMsg(''), 5000);
+    return () => clearTimeout(timer);
+  }, [successMsg]);
+
+  useEffect(() => {
+    if (!errorMsg) return;
+    const timer = setTimeout(() => setErrorMsg(''), 5000);
+    return () => clearTimeout(timer);
+  }, [errorMsg]);
 
   useEffect(() => {
     let isMounted = true;
@@ -39,19 +57,32 @@ export default function AdminTutorsPage() {
     return () => { isMounted = false; };
   }, []);
 
-  const handleReviewTutor = (tutorId: string, action: 'Approve' | 'Reject') => {
-    let reason = '';
-    if (action === 'Reject') {
-      const input = prompt('Nhập lý do từ chối hồ sơ gia sư này:');
-      if (input === null) return;
-      reason = input || 'Hồ sơ chưa đạt yêu cầu';
-    } else {
-      if (!confirm(`Bạn có chắc chắn muốn PHÊ DUYỆT hồ sơ gia sư này không?`)) return;
-    }
+
+   const handleReviewTutor = (tutorId: string, action: 'Approve' | 'Reject') => {
+    const targetTutor = tutors.find((t) => t.user_id === tutorId);
+    const tutorName = targetTutor?.profiles?.full_name || 'gia sư này';
 
     setErrorMsg('');
+    setSuccessMsg('');
+    setRejectionReason('');
+    setReviewModal({
+      tutorId,
+      tutorName,
+      action,
+    });
+  };
+
+  const confirmReviewTutor = ()=> {
+    
+    if (!reviewModal) return;
+
+    const { tutorId, tutorName, action } = reviewModal;
+    const finalReason = action === 'Reject' ? (rejectionReason.trim() || 'Hồ sơ chưa đạt yêu cầu') : '';
+    setErrorMsg('');
+    setSuccessMsg('');
+
     startTransition(async () => {
-      const res = await processFirstTimeProfile(tutorId, action, reason);
+      const res = await processFirstTimeProfile(tutorId, action, finalReason);
       if (res?.success) {
         setTutors((prev) =>
           prev.map((t) =>
@@ -75,7 +106,15 @@ export default function AdminTutorsPage() {
               : null
           );
         }
+        setReviewModal(null);
+        setRejectionReason('');
+        setSuccessMsg(
+          action === 'Approve'
+            ? `Đã phê duyệt hồ sơ của gia sư ${tutorName} thành công.`
+            : `Đã từ chối hồ sơ của gia sư ${tutorName}.`
+        );
       } else {
+        setReviewModal(null);
         setErrorMsg(res?.errors || 'Lỗi khi xử lý hồ sơ');
       }
     });
@@ -170,7 +209,13 @@ export default function AdminTutorsPage() {
         </div>
       )}
 
-      {/* DANH SÁCH GIA SƯ */}
+      {successMsg && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl text-xs font-bold flex items-center gap-2">
+          <CheckCircle2 className="size-4 shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
       {loading ? (
         <div className="p-16 text-center bg-white rounded-3xl border border-slate-200/80 flex flex-col items-center justify-center gap-2">
           <Loader2 className="size-8 text-indigo-600 animate-spin" />
@@ -203,6 +248,90 @@ export default function AdminTutorsPage() {
         onApprove={(id) => handleReviewTutor(id, 'Approve')}
         isPending={isPending}
       />
+       {reviewModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                {reviewModal.action === 'Approve' ? (
+                  <>
+                    <ShieldCheck className="size-5 text-emerald-600" />
+                    Xác nhận phê duyệt hồ sơ
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="size-5 text-rose-600" />
+                    Từ chối hồ sơ gia sư
+                  </>
+                )}
+              </h3>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setReviewModal(null)}
+                className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            {reviewModal.action === 'Approve' ? (
+              <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 text-xs text-slate-600 space-y-2 leading-relaxed">
+                <p>
+                  Bạn có chắc chắn muốn <strong className="text-emerald-700">PHÊ DUYỆT</strong> hồ sơ của gia sư{' '}
+                  <strong className="text-slate-900">{reviewModal.tutorName}</strong>?
+                </p>
+                <p className="text-[11px] text-slate-500 pt-1 border-t border-emerald-200/60">
+                  Sau khi phê duyệt, hồ sơ gia sư sẽ được hiển thị công khai và có thể nhận yêu cầu học từ học viên.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Vui lòng nhập lý do từ chối hồ sơ của gia sư{' '}
+                  <strong className="text-slate-800">{reviewModal.tutorName}</strong> (nếu để trống hệ thống sẽ dùng lý do mặc định):
+                </p>
+                <textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Ví dụ: Hồ sơ thiếu thông tin bằng cấp, mô tả chưa rõ ràng..."
+                  className="w-full h-28 p-3.5 border border-slate-200 rounded-2xl text-xs focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition-all resize-none text-slate-800"
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setReviewModal(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all cursor-pointer disabled:opacity-50"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={confirmReviewTutor}
+                className={`px-5 py-2.5 rounded-xl text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                  reviewModal.action === 'Approve'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-rose-600 hover:bg-rose-700'
+                }`}
+              >
+                {isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : reviewModal.action === 'Approve' ? (
+                  <ShieldCheck className="size-4" />
+                ) : (
+                  <XCircle className="size-4" />
+                )}
+                {reviewModal.action === 'Approve' ? 'Xác nhận Phê duyệt' : 'Xác nhận Từ chối'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

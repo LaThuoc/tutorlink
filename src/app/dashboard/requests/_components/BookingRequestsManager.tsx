@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import React, { useState, useTransition, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   CheckCircle2, XCircle, Clock, MessageSquare, Phone, BookOpen, 
   Calendar, AlertCircle, Loader2, Filter, Trash2, CheckSquare, Square
@@ -8,29 +9,24 @@ import {
 import { BookingRequestItem, BookingStatus } from '@/src/types/tutor.type';
 import { updateBookingStatus } from '@/src/modules/tutor/getStudentRequest';
 import { deleteBookingRequests } from '@/src/modules/tutor/deletePageTutor';
+import { ScheduleSlot } from '@/src/types/tutor.type';
+import { createClient } from '@/src/lib/supabase/client';
 
-export interface ScheduleSlotDB {
-  id: string;
-  dayOfWeek: number | string;
-  startTime: string;
-  endTime: string;
-  isAvailable?: boolean;
-}
 
 interface Props {
   initialRequests: BookingRequestItem[];
-  tutorSchedules?: ScheduleSlotDB[];
+  tutorSchedules?: ScheduleSlot[];
 }
 
 const MAP_DAY_NUMBER: Record<number | string, string> = {
-  1: 'Chủ nhật',
-  2: 'Thứ 2',
-  3: 'Thứ 3',
-  4: 'Thứ 4',
-  5: 'Thứ 5',
-  6: 'Thứ 6',
-  7: 'Thứ 7',
-  8: 'Chủ nhật',
+  0: 'Chủ nhật',
+  1: 'Thứ 2',
+  2: 'Thứ 3',
+  3: 'Thứ 4',
+  4: 'Thứ 5',
+  5: 'Thứ 6',
+  6: 'Thứ 7',
+  
 };
 
 const FALLBACK_SLOT_MAP: Record<string, string> = {
@@ -47,50 +43,118 @@ const STATUS_CONFIG: Record<BookingStatus, { label: string; badge: string; icon:
 };
 
 export default function BookingRequestsManager({ initialRequests, tutorSchedules = [] }: Props) {
+  const router = useRouter()
   const [requests, setRequests] = useState<BookingRequestItem[]>(initialRequests);
   const [filter, setFilter] = useState<string>('ALL');
   const [isPending, startTransition] = useTransition();
-
+  const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [acceptingReq, setAcceptingReq] = useState<BookingRequestItem | null>(null);
+  const [deletingIds, setDeletingIds] = useState<string[] | null>(null);
 
-  const renderScheduleText = (slotId: string | null) => {
-    if (!slotId) return 'Thỏa thuận trực tiếp';
 
-    const foundSlot = tutorSchedules.find((s) => s.id === slotId);
-    if (foundSlot) {
-      let dayText = '';
-      const dayVal = foundSlot.dayOfWeek;
 
-      if (MAP_DAY_NUMBER[dayVal]) {
-        dayText = MAP_DAY_NUMBER[dayVal];
-      } else if (typeof dayVal === 'number') {
-        dayText = `Thứ ${dayVal}`;
+  useEffect(() => {
+    const supabase = createClient();
+    let isCancelled = false;
+    let activeChannel: ReturnType<typeof supabase.channel> | null = null;
+
+    const setupRealtime = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || isCancelled) return;
+
+      const channelName = `tutor-booking-requests-${user.id}-${Date.now()}`;
+
+      const channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'booking_requests',
+            filter: `tutor_id=eq.${user.id}`,
+          },
+          () => {
+            router.refresh();
+          }
+        )
+        .subscribe();
+
+      if (isCancelled) {
+        supabase.removeChannel(channel);
       } else {
-        dayText = String(dayVal).includes('Thứ') || String(dayVal).includes('Chủ') 
-          ? String(dayVal) 
-          : `Thứ ${dayVal}`;
+        activeChannel = channel;
+      }
+    };
+
+    setupRealtime();
+
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        router.refresh();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    return () => {
+      isCancelled = true;
+      if (activeChannel) {
+        supabase.removeChannel(activeChannel);
+      }
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [router]);
+
+  const formatWeeklySlots = (rawSlotId: string | null): string[] => {
+    if (!rawSlotId) return ['Thỏa thuận trực tiếp'];
+
+    const items = rawSlotId
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    return items.map((item) => {
+      if (item.includes('|')) {
+        const [datePart, timePart] = item.split('|').map((s) => s.trim());
+        const d = new Date(`${datePart}T00:00:00Z`);
+        if (!isNaN(d.getTime())) {
+          const dayName = MAP_DAY_NUMBER[d.getUTCDay()] || '';
+          return timePart ? `${dayName} (${timePart})` : dayName;
+        }
+        return timePart || item;
       }
 
-      const timeText = foundSlot.startTime && foundSlot.endTime 
-        ? ` (${foundSlot.startTime} - ${foundSlot.endTime})` 
-        : '';
+      const foundSlot = tutorSchedules.find((s) => s.id === item);
+      if (foundSlot) {
+        const dayVal = foundSlot.dayOfWeek;
+        const dayText =
+          MAP_DAY_NUMBER[dayVal] ||
+          (String(dayVal).includes('Thứ') || String(dayVal).includes('Chủ')
+            ? String(dayVal)
+            : `Thứ ${dayVal}`);
 
-      return `${dayText}${timeText}`;
-    }
+        const timeText =
+          foundSlot.startTime && foundSlot.endTime
+            ? ` (${foundSlot.startTime} - ${foundSlot.endTime})`
+            : '';
 
-    if (FALLBACK_SLOT_MAP[slotId]) {
-      return FALLBACK_SLOT_MAP[slotId];
-    }
+        return `${dayText}${timeText}`;
+      }
 
-    if (slotId.includes('Thứ') || slotId.includes('Chủ nhật')) {
-      return slotId;
-    }
+      // 3. Dự phòng
+      if (FALLBACK_SLOT_MAP[item]) {
+        return FALLBACK_SLOT_MAP[item];
+      }
 
-    return `Lịch ID: ${slotId.slice(0, 8)}...`;
+      return item;
+    });
   };
 
   const filteredRequests = requests.filter((req) => {
@@ -118,41 +182,53 @@ export default function BookingRequestsManager({ initialRequests, tutorSchedules
     );
   };
 
-  const handleDeleteBatch = (idsToDelete: string[]) => {
+  const openDeleteModal = (idsToDelete: string[]) => {
     if (idsToDelete.length === 0) return;
+    setErrorMsg('');
+    setDeletingIds(idsToDelete);
+  };
 
-    const confirmMsg = idsToDelete.length === 1
-      ? 'Bạn có chắc chắn muốn xóa yêu cầu đăng ký này khỏi danh sách?'
-      : `Bạn có chắc chắn muốn xóa ${idsToDelete.length} yêu cầu đăng ký đã chọn?`;
-
-    if (!confirm(confirmMsg)) return;
+  // 🟢 [ĐÃ SỬA 3]: Hàm thực thi xóa khi người dùng bấm nút xác nhận trong Modal Xóa
+  const confirmDelete = () => {
+    if (!deletingIds || deletingIds.length === 0) return;
 
     setErrorMsg('');
     startTransition(async () => {
-      const res = await deleteBookingRequests(idsToDelete);
+      const res = await deleteBookingRequests(deletingIds);
       if (res.success) {
-        setRequests((prev) => prev.filter((r) => !idsToDelete.includes(r.id)));
-        setSelectedIds((prev) => prev.filter((id) => !idsToDelete.includes(id)));
+        setRequests((prev) => prev.filter((r) => !deletingIds.includes(r.id)));
+        setSelectedIds((prev) => prev.filter((id) => !deletingIds.includes(id)));
+        setDeletingIds(null);
+        router.refresh();
       } else {
         setErrorMsg(res.error || 'Lỗi khi xóa yêu cầu');
+        setDeletingIds(null);
       }
     });
   };
 
-  const handleAccept = (req: BookingRequestItem) => {
-    if (!confirm(`Bạn có chắc chắn muốn CHẤP NHẬN yêu cầu dạy môn ${req.subject} cho học viên ${req.student?.full_name || 'này'}?`)) {
-      return;
-    }
+  // 🟢 [ĐÃ SỬA 4]: Mở Modal xác nhận chấp nhận thay vì gọi window.confirm()
+  const openAcceptModal = (req: BookingRequestItem) => {
+    setErrorMsg('');
+    setAcceptingReq(req);
+  };
+
+  // 🟢 [ĐÃ SỬA 5]: Hàm thực thi chấp nhận khi người dùng bấm xác nhận trong Modal Chấp nhận
+  const confirmAccept = () => {
+    if (!acceptingReq) return;
 
     setErrorMsg('');
     startTransition(async () => {
-      const res = await updateBookingStatus(req.id, 'Accepted');
+      const res = await updateBookingStatus(acceptingReq.id, 'Accepted');
       if (res.success) {
         setRequests((prev) =>
-          prev.map((r) => (r.id === req.id ? { ...r, status: 'Accepted' as BookingStatus } : r))
+          prev.map((r) => (r.id === acceptingReq.id ? { ...r, status: 'Accepted' as BookingStatus } : r))
         );
+        setAcceptingReq(null);
+        router.refresh();
       } else {
         setErrorMsg(res.errors || 'Lỗi khi chấp nhận yêu cầu');
+        setAcceptingReq(null);
       }
     });
   };
@@ -178,6 +254,7 @@ export default function BookingRequestsManager({ initialRequests, tutorSchedules
           )
         );
         setRejectingId(null);
+        router.refresh()
       } else {
         setErrorMsg(res.errors || 'Lỗi khi từ chối yêu cầu');
       }
@@ -251,7 +328,7 @@ export default function BookingRequestsManager({ initialRequests, tutorSchedules
               <button
                 type="button"
                 disabled={isPending}
-                onClick={() => handleDeleteBatch(selectedIds)}
+                onClick={() => openDeleteModal(selectedIds)}
                 className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
@@ -289,10 +366,14 @@ export default function BookingRequestsManager({ initialRequests, tutorSchedules
             const studentName = req.student?.full_name || 'Học viên ẩn danh';
             const avatarUrl = req.student?.avatar_url;
             const isSelected = selectedIds.includes(req.id);
+            const isThisProcessing = processingId === req.id; // 🟢 [ĐÃ SỬA 13]: Kiểm tra riêng từng thẻ
+
 
             const formattedLessonDate = req.lesson_date 
               ? new Date(req.lesson_date).toLocaleDateString('vi-VN')
               : 'Chưa chọn ngày';
+
+            const weeklySlots = formatWeeklySlots(req.schedule_slot_id);
 
             return (
               <div
@@ -341,7 +422,7 @@ export default function BookingRequestsManager({ initialRequests, tutorSchedules
                     <button
                       type="button"
                       disabled={isPending}
-                      onClick={() => handleDeleteBatch([req.id])}
+                      onClick={() => openDeleteModal([req.id])}
                       title="Xóa yêu cầu này"
                       className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                     >
@@ -380,10 +461,15 @@ export default function BookingRequestsManager({ initialRequests, tutorSchedules
 
                   <div>
                     <span className="text-slate-400 font-medium block mb-1">Khung giờ trong tuần</span>
-                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                      <Clock className="size-4 text-amber-600" />
-                      {renderScheduleText(req.schedule_slot_id)}
-                    </span>
+                    
+                    <div className="flex flex-col gap-1">
+                      {weeklySlots.map((slotText, idx) => (
+                        <span key={idx} className="font-bold text-slate-800 flex items-center gap-1.5">
+                          <Clock className="size-4 text-amber-600 shrink-0" />
+                          <span>{slotText}</span>
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -416,10 +502,10 @@ export default function BookingRequestsManager({ initialRequests, tutorSchedules
                     <button
                       type="button"
                       disabled={isPending}
-                      onClick={() => handleAccept(req)}
+                      onClick={() => openAcceptModal(req)}
                       className="px-5 py-2 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 shadow-sm shadow-blue-600/20 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                     >
-                      {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                      {isThisProcessing ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
                       Chấp nhận yêu cầu
                     </button>
                   </div>
@@ -427,6 +513,99 @@ export default function BookingRequestsManager({ initialRequests, tutorSchedules
               </div>
             );
           })}
+        </div>
+      )}
+
+      {acceptingReq && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid place-items-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-2xl bg-blue-50 text-blue-600 grid place-items-center shrink-0">
+                <CheckCircle2 className="size-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Xác nhận nhận lớp</h3>
+                <p className="text-[11px] text-slate-400">Hệ thống sẽ thông báo cho học viên ngay sau khi xác nhận</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-4 text-xs text-slate-600 space-y-2 leading-relaxed">
+              <p>
+                Bạn có chắc chắn muốn <b className="text-blue-600">CHẤP NHẬN</b> yêu cầu đăng ký học từ học viên{' '}
+                <b className="text-slate-900">{acceptingReq.student?.full_name || 'này'}</b>?
+              </p>
+              <div className="pt-1 border-t border-slate-200/60 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                <span>
+                  Môn học: <b className="text-slate-800">{acceptingReq.subject}</b>
+                </span>
+                <span>
+                  Lịch học: <b className="text-slate-800">{formatWeeklySlots(acceptingReq.schedule_slot_id).join(', ')}</b>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setAcceptingReq(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={confirmAccept}
+                className="px-5 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shadow-sm shadow-blue-600/20 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              >
+                {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                Xác nhận chấp nhận
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingIds && deletingIds.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid place-items-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-2xl bg-rose-50 text-rose-600 grid place-items-center shrink-0">
+                <Trash2 className="size-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Xác nhận xóa yêu cầu</h3>
+                <p className="text-[11px] text-slate-400">Hành động này không thể hoàn tác</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed bg-rose-50/40 border border-rose-100 p-3.5 rounded-2xl">
+              {deletingIds.length === 1
+                ? 'Bạn có chắc chắn muốn xóa yêu cầu đăng ký học này khỏi danh sách quản lý của bạn?'
+                : `Bạn có chắc chắn muốn xóa ${deletingIds.length} yêu cầu đăng ký học đã chọn khỏi danh sách?`}
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setDeletingIds(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={confirmDelete}
+                className="px-5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 shadow-sm shadow-rose-600/20 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              >
+                {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                Xác nhận xóa
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
-import { CheckCircle2, Mail, Send, RotateCcw } from "lucide-react";
+import { useActionState,useState } from "react";
+import { CheckCircle2, Send, RotateCcw } from "lucide-react";
 import { sendContact, type ContactState} from "@/src/modules/contact/contact_message";
 
 const initial: ContactState = {};
@@ -22,8 +22,18 @@ function Field({
     </div>
   );
 }
-
 export function ContactForm() {
+  const [formKey, setFormKey] = useState(0);
+
+  return (
+    <ContactFormInner 
+      key={formKey} 
+      onReset={() => setFormKey((prev) => prev + 1)} 
+    />
+  );
+}
+function ContactFormInner({ onReset }: { onReset: () => void }) {
+  
   const [state, action, pending] = useActionState(sendContact, initial);
   const fe = state.fieldErrors ?? {};
   const v = state.values ?? {};
@@ -46,7 +56,7 @@ export function ContactForm() {
         
         <button
           type="button"
-          onClick={() => window.location.reload()}
+          onClick={onReset}
           className="mt-2 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-5 py-2.5 text-xs font-bold text-blue-600 shadow-sm transition hover:bg-blue-50 active:scale-95"
         >
           <RotateCcw className="size-4" /> Gửi tin nhắn khác
@@ -120,7 +130,6 @@ export function ContactForm() {
         />
       </Field>
 
-      {/* Ô bẫy bot: ẩn khỏi người dùng và trình đọc màn hình */}
       <div aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 overflow-hidden">
         <label>Website <input name="website" type="text" tabIndex={-1} autoComplete="off" /></label>
       </div>
@@ -134,7 +143,7 @@ export function ContactForm() {
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex h-12 items-center justify-center gap-2.5 self-start rounded-xl bg-blue-600 px-7 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-600/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex h-12 items-center justify-center gap-2.5 self-start rounded-xl bg-blue-600 px-7 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-600/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
       >
         {pending ? (
           <>

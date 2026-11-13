@@ -1,5 +1,5 @@
 'use client';
-
+import { useRouter } from 'next/navigation';
 import React, { useState, useEffect, useTransition } from 'react';
 import { 
   X, Calendar, Clock, CheckCircle2, DollarSign, Loader2, AlertCircle, 
@@ -22,14 +22,21 @@ export default function LessonScheduleModal({
   studentName,
   subject,
 }: Props) {
+  const router = useRouter()
   const [lessons, setLessons] = useState<LessonSession[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [isScheduleMismatch, setIsScheduleMismatch] = useState<boolean>(false);
   const [isPending, startTransition] = useTransition();
+  const [completingId, setCompletingId] = useState<string | null>(null);
+
+  const [confirmingLesson, setConfirmingLesson] = useState<{id: string; dateStr: string;timeStr?: string} | null>(null);
+  const [actionError, setActionError] = useState<string>('');
 
   const now = new Date();
   const [currentMonth, setCurrentMonth] = useState<number>(now.getMonth() + 1);
   const [currentYear, setCurrentYear] = useState<number>(now.getFullYear());
+  
 
   useEffect(() => {
     let isMounted = true;
@@ -39,6 +46,7 @@ export default function LessonScheduleModal({
         if (isMounted) {
           setLoading(true);
           setErrorMsg('');
+          setIsScheduleMismatch(false);
         }
 
         const res = await getOrGenerateLessons(bookingId, currentMonth, currentYear);
@@ -47,6 +55,7 @@ export default function LessonScheduleModal({
           setLoading(false);
           if (res.success && res.lessons) {
             setLessons(res.lessons);
+            setIsScheduleMismatch(Boolean(res.isScheduleMismatch));
           } else {
             setErrorMsg(res.error || 'Không thể tải danh sách buổi học');
           }
@@ -79,20 +88,35 @@ export default function LessonScheduleModal({
     }
   };
 
-  const handleCompleteLesson = (lessonId: string, dateStr: string) => {
-    if (!confirm(`Xác nhận hoàn thành buổi học ngày ${dateStr}?`)) return;
+  const openCompleteConfirmModal = (lessonId: string, dateStr: string, timeStr?: string) => {
+    setActionError('');
+    setConfirmingLesson({ id: lessonId, dateStr, timeStr });
+  };
+
+  const confirmCompleteLesson = () => {
+    if (!confirmingLesson) return;
+
+    const targetId = confirmingLesson.id;
+    setCompletingId(targetId);
+    setActionError('');
 
     startTransition(async () => {
-      const res = await completeSingleLesson(lessonId);
+      const res = await completeSingleLesson(targetId);
+      setCompletingId(null);
+
       if (res.success) {
         setLessons((prev) =>
-          prev.map((item) => (item.id === lessonId ? { ...item, status: 'Completed' } : item))
+          prev.map((item) => (item.id === targetId ? { ...item, status: 'Completed' } : item))
         );
+        setConfirmingLesson(null);
+        router.refresh(); 
       } else {
-        alert(res.error || 'Có lỗi xảy ra khi hoàn thành buổi học.');
+        setConfirmingLesson(null);
+        setActionError(res.error || 'Có lỗi xảy ra khi hoàn thành buổi học.');
       }
     });
   };
+
 
   if (!isOpen) return null;
 
@@ -145,6 +169,23 @@ export default function LessonScheduleModal({
           </button>
         </div>
 
+
+         {actionError && (
+          <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-bold flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="size-4 shrink-0" />
+              <span>{actionError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActionError('')}
+              className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="py-12 flex flex-col items-center justify-center space-y-2 text-slate-400">
             <Loader2 className="size-8 animate-spin text-blue-600" />
@@ -163,7 +204,7 @@ export default function LessonScheduleModal({
           <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
             {lessons.map((item, index) => {
               const isCompleted = item.status === 'Completed';
-              const isPaid = Boolean(item.is_paid); // Kiểm tra xem buổi học này đã thu tiền chưa
+              const isPaid = Boolean(item.is_paid);
               
               const [y, m, d] = item.lesson_date.split('-').map(Number);
               const dateObj = new Date(Date.UTC(y, m - 1, d));
@@ -175,6 +216,10 @@ export default function LessonScheduleModal({
                 day: 'numeric',
                 timeZone: 'UTC',
               });
+              const displayTime = item.schedule_text?.includes('|')
+                ? item.schedule_text.split('|').pop()?.trim()
+                : item.schedule_text;
+
 
               return (
                 <div
@@ -204,7 +249,7 @@ export default function LessonScheduleModal({
                       </div>
                       <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
                         <Clock className="size-3 text-slate-400" />
-                        <span>Giờ học: {item.schedule_text}</span>
+                        <span>Giờ học: {displayTime}</span>
                       </div>
                     </div>
                   </div>
@@ -224,10 +269,10 @@ export default function LessonScheduleModal({
                       <button
                         type="button"
                         disabled={isPending}
-                        onClick={() => handleCompleteLesson(item.id, dateFormatted)}
+                        onClick={() => openCompleteConfirmModal(item.id, dateFormatted)}
                         className="w-full sm:w-auto px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
                       >
-                        {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <DollarSign className="size-3.5" />}
+                        {completingId === item.id ? (<Loader2 className="size-3.5 animate-spin" /> ): (<DollarSign className="size-3.5" />)}
                         Đã dạy xong buổi này
                       </button>
                     )}
@@ -248,6 +293,59 @@ export default function LessonScheduleModal({
           </button>
         </div>
       </div>
+
+       {confirmingLesson && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-2xl bg-emerald-50 text-emerald-600 grid place-items-center shrink-0">
+                <CheckCircle2 className="size-5" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-slate-900">Xác nhận hoàn thành buổi học</h4>
+                <p className="text-[11px] text-slate-400">Buổi học sẽ được chuyển sang trạng thái chờ thu tiền</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-4 text-xs text-slate-600 space-y-1.5 leading-relaxed">
+              <p>
+                Bạn xác nhận đã hoàn thành buổi dạy môn <b className="text-blue-600 capitalize">{subject}</b> cho học viên{' '}
+                <b className="text-slate-900">{studentName}</b>?
+              </p>
+              <div className="pt-1.5 border-t border-slate-200/60 text-[11px] space-y-1">
+                <div>
+                  Ngày học: <b className="text-slate-800 capitalize">{confirmingLesson.dateStr}</b>
+                </div>
+                {confirmingLesson.timeStr && (
+                  <div>
+                    Khung giờ: <b className="text-slate-800">{confirmingLesson.timeStr}</b>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setConfirmingLesson(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={confirmCompleteLesson}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm shadow-emerald-600/20 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              >
+                {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                Xác nhận đã dạy xong
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

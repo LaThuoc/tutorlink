@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 
-import { TabType,Item, Experience,Education,SlotRaw,ScheduleRaw } from '@/src/types/tutor.type';
+import { TabType,Item, Experience,EducationItem,SlotRaw,ScheduleRaw } from '@/src/types/tutor.type';
 import { FullTutorDetail, Review, RawTutor, SubjectDetailItem, CertificateItem } from '@/src/types/tutor.type';
 
 
@@ -449,7 +449,7 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
           school_name: raw.school_name || '',
           education: raw.education || '',
           experiences: parseJsonSafely<Experience>(raw.experiences),
-          educations: parseJsonSafely<Education>(raw.educations),
+          educations: parseJsonSafely<EducationItem>(raw.educations),
           certificates: toItems(raw.certificates),
           certificates_list: toItems(raw.certificates_data || raw.certificates) as CertificateItem[],
           achievements: toItems(raw.achievements),
@@ -531,6 +531,64 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
     setExistingRequest(req);
   }
   }, [tutor])
+  const refreshBookingAndSchedule = useCallback(
+    async (tutorUserId: string) => {
+      const req = await getExistingBookingRequest(tutorUserId);
+      setExistingRequest(req);
+
+      const { data: updatedProfile } = await supabase
+        .from('tutor_profiles')
+        .select('schedules_data')
+        .eq('user_id', tutorUserId)
+        .maybeSingle();
+
+      if (updatedProfile?.schedules_data) {
+        setTutor((prev) =>
+          prev
+            ? { ...prev, schedules: parseJsonSafely<ScheduleRaw>(updatedProfile.schedules_data) }
+            : null
+        );
+      }
+    },
+    [supabase]
+  );
+
+  useEffect(() => {
+    if (!tutor?.user_id) return;
+
+    const tutorUserId = tutor.user_id;
+
+    const channel = supabase
+      .channel(`booking-status-${tutorUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'booking_requests',
+          filter: `tutor_id=eq.${tutorUserId}`,
+        },
+        () => {
+          refreshBookingAndSchedule(tutorUserId);
+        }
+      )
+      .subscribe();
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        refreshBookingAndSchedule(tutorUserId);
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
+  }, [tutor?.user_id, supabase, refreshBookingAndSchedule]);
 
     const handleToggleSave = async () => {
       if(!tutor) return 
@@ -610,7 +668,6 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
               <div className="flex flex-col gap-6 sm:flex-row">
                 <div className="relative shrink-0 self-start">
                   {tutor.avatar_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={tutor.avatar_url} alt={tutor.full_name} className="h-[230px] w-[220px] rounded-xl object-cover" />
                   ) : (
                     <div className="grid h-[230px] w-[220px] select-none place-items-center rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 text-6xl font-extrabold text-white">
@@ -899,8 +956,8 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                               <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-4">
                                 <span className="mt-0.5 text-blue-600">{i === 0 ? <GraduationCap className="size-6" /> : <School className="size-6" />}</span>
                                 <div className="min-w-0 flex-1">
-                                  <h4 className="text-sm font-bold text-slate-900">{e.school}</h4>
-                                  {e.degree && <p className="mt-0.5 text-xs text-slate-600">{e.degree}</p>}
+                                  <h4 className="text-sm font-bold text-slate-900">{e.school || e.schoolName}</h4>
+                                  {(e.degree || e.major) && <p className="mt-0.5 text-xs text-slate-600">{e.degree || e.major}</p>}
                                   {e.detail && <p className="mt-0.5 text-xs text-slate-600">{e.detail}</p>}
                                 </div>
                                 {e.status && <span className="shrink-0 rounded-full bg-blue-50 px-3 py-1 text-[11px] font-medium text-blue-600">{e.status}</span>}
@@ -1022,7 +1079,6 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                   <div>
                     <p className="text-slate-500">Số điện thoại</p>
                     <p className="font-semibold text-blue-600">{tutor.phone || 'Ẩn số điện thoại'}</p>
-                    {tutor.phone && <p className="text-[11px] text-slate-400">(Hiển thị với học sinh)</p>}
                   </div>
                 </li>
                 <li className="flex items-start gap-3.5">
@@ -1039,7 +1095,7 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                     <p className="font-medium text-slate-800">{tutor.address}</p>
                   </div>
                 </li>
-                {tutor.teaching_areas && tutor.teaching_areas.length > 0 && (
+                {/* {tutor.teaching_areas && tutor.teaching_areas.length > 0 && (
                   <li className="flex items-start gap-3.5 border-t border-slate-100 pt-3">
                     <MapPin className="mt-0.5 size-[18px] text-emerald-600" />
                     <div>
@@ -1053,7 +1109,7 @@ export default function TutorDetailPage({ params }: { params: Promise<{ id: stri
                       </div>
                     </div>
                   </li>
-                )}
+                )} */}
               </ul>
               {tutor.is_verified && (
                 <div className="mt-5 flex items-center gap-3 rounded-lg bg-emerald-50 p-3.5">

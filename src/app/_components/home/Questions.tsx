@@ -25,15 +25,12 @@ const FAQS = [
 
 export function Questions() {
   return (
-    /* LỚP VÙNG (Section Level): Bleed Background tràn 100% hai bên lề màn hình */
     <section id="faq" className="w-full bg-white py-14 sm:py-20 scroll-mt-20">
       
-      {/* KHUNG NỘI DUNG (Constrained Content): Căn lề ngang max-w-[1920px] đồng bộ tuyệt đối */}
       <div className="mx-auto w-full max-w-[1920px] px-5 sm:px-8 lg:px-10 xl:px-14 2xl:px-20">
         
         <div className="grid items-start gap-10 lg:grid-cols-12 lg:gap-16">
           
-          {/* CỘT TRÁI: TIÊU ĐỀ & NÚT HỖ TRỢ (Chiếm 5 cột trên Desktop) */}
           <div className="lg:col-span-5 lg:sticky lg:top-28">
             <span className="inline-block rounded-full bg-blue-50 px-4 py-1.5 text-xs font-bold tracking-wide text-blue-600 border border-blue-100/80 mb-4">
               Giải đáp thắc mắc
@@ -48,7 +45,7 @@ export function Questions() {
             </p>
 
             <Link
-              href="/contact"
+              href="/about#lien-he"
               className="mt-8 inline-flex h-[52px] items-center gap-2.5 rounded-2xl bg-blue-600 px-7 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-blue-700 hover:shadow-blue-600/30 active:scale-95"
             >
               <Mail className="size-4" aria-hidden="true" />
@@ -56,7 +53,6 @@ export function Questions() {
             </Link>
           </div>
 
-          {/* CỘT PHẢI: DANH SÁCH CHI TIẾT CÂU HỎI (Chiếm 7 cột trên Desktop) */}
           <div className="space-y-4 lg:col-span-7">
             {FAQS.map(({ q, a }, i) => (
               <details
