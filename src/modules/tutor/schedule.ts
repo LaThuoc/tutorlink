@@ -16,7 +16,6 @@ const DAY_LABEL: Record<number, string> = {
     2: 'Thứ 2', 3: 'Thứ 3', 4: 'Thứ 4', 5: 'Thứ 5', 6: 'Thứ 6', 7: 'Thứ 7', 8: 'Chủ nhật',
 }
  
-// ---------- Helpers (không export) ----------
 function parseSlots(raw: unknown): ScheduleSlot[] {
     let value = raw
     if (typeof value === 'string') {
@@ -27,7 +26,7 @@ function parseSlots(raw: unknown): ScheduleSlot[] {
  
 function sortSlots(slots: ScheduleSlot[]): ScheduleSlot[] {
     return [...slots].sort(
-        (a, b) => a.dayOfWeek - b.dayOfWeek || toMinutes(a.startTime) - toMinutes(b.startTime)
+        (a, b) => Number(a.dayOfWeek) - Number(b.dayOfWeek) || toMinutes(a.startTime) - toMinutes(b.startTime)
     )
 }
  
@@ -46,10 +45,7 @@ function dayOfWeekFromIso(iso: string): number {
     return js === 0 ? 8 : js + 1
 }
  
-/**
- * Tìm các khung giờ đang có yêu cầu học còn hiệu lực (Pending / Accepted) trong tương lai.
- * schedule_slot_id của học viên có dạng "YYYY-MM-DD|HH:MM - HH:MM" -> quy ra thứ trong tuần để đối chiếu.
- */
+
 async function getSlotsWithActiveBooking(ctx: TutorCtx, slots: ScheduleSlot[]): Promise<Set<string>> {
     const busy = new Set<string>()
     const { data } = await ctx.supabase
@@ -114,10 +110,7 @@ async function withTutor(fn: (ctx: TutorCtx) => Promise<ScheduleActionResult>): 
         return { success: false, errors: err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định' }
     }
 }
- 
-// ---------- Server actions ----------
- 
-/** Lấy toàn bộ khung giờ dạy của gia sư đang đăng nhập */
+  
 export async function getMySchedule(): Promise<ScheduleActionResult> {
     return withTutor(async (ctx) => {
         const slots = await loadSlots(ctx)
@@ -126,7 +119,6 @@ export async function getMySchedule(): Promise<ScheduleActionResult> {
     })
 }
  
-/** Thêm khung giờ mới: chọn nhiều thứ cùng lúc + 1 khoảng giờ -> tạo mỗi thứ một khung giờ lặp lại hằng tuần */
 export async function addScheduleSlots(input: {
     days: number[]
     startTime: string
@@ -181,31 +173,6 @@ export async function addScheduleSlots(input: {
     })
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 export async function UpdateTutorSchedule(slots: ScheduleSlot[]): Promise<ScheduleActionResult> {
     return withTutor(async (ctx) => {
         const parsed = z.array(scheduleSlotSchema).safeParse(slots)
@@ -219,7 +186,7 @@ export async function UpdateTutorSchedule(slots: ScheduleSlot[]): Promise<Schedu
                 if (isOverlap(valid[i], valid[j])) {
                     return {
                         success: false,
-                        errors: `Hai khung giờ bị trùng nhau vào ${DAY_LABEL[valid[i].dayOfWeek]}`,
+                        errors: `Hai khung giờ bị trùng nhau vào ${DAY_LABEL[Number(valid[i].dayOfWeek)]}`,
                     }
                 }
             }
@@ -281,7 +248,7 @@ export async function deleteScheduleSlot(slotIds: string[]): Promise<ScheduleAct
         const busy = await getSlotsWithActiveBooking(ctx, current)
         const blocked = current.filter((s) => slotIds.includes(s.id) && busy.has(s.id))
         if (blocked.length > 0) {
-            const text = blocked.map((s) => `${DAY_LABEL[s.dayOfWeek]} ${s.startTime} - ${s.endTime}`).join(', ')
+            const text = blocked.map((s) => `${DAY_LABEL[Number(s.dayOfWeek)]} ${s.startTime} - ${s.endTime}`).join(', ')
             return {
                 success: false,
                 errors: `Không thể xóa vì đang có yêu cầu học: ${text}. Hãy xử lý yêu cầu đó trước.`,

@@ -66,7 +66,26 @@ export default function StudentReviewsPage() {
   const [success, setSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Lấy danh sách lớp học của học viên
+  useEffect(() => {
+    if (!success) return;
+
+    const timer = setTimeout(() => {
+      setSuccess(false);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [success]);
+
+  useEffect(() => {
+    if (!errorMessage) return;
+
+    const timer = setTimeout(() => {
+      setErrorMessage('');
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [errorMessage]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -135,7 +154,6 @@ export default function StudentReviewsPage() {
     };
   }, [supabase]);
 
-  // Gửi đánh giá
   const handleSubmitReview = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 

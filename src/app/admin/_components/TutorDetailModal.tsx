@@ -5,7 +5,7 @@ import { createClient } from '@/src/lib/supabase/client';
 import { 
   X, CheckCircle2, GraduationCap, Award, BookOpen, FileText,
   MapPin, Calendar, Briefcase, Phone, Mail, Clock, ShieldCheck, ExternalLink,
-  Sparkles, AlertCircle, Laptop, Trophy, Star, User
+  Sparkles, AlertCircle, Laptop, Trophy, Star, User, XCircle
 } from 'lucide-react';
 import { CertificateItem, ExperienceItem, EducationItem, ScheduleSlot} from '@/src/types/tutor.type';
 
@@ -73,7 +73,7 @@ interface ModalProps {
   isPending: boolean;
 }
 
-const DAYS_MAP: Record<number, string> = {
+const DAYS_MAP: Record<number |  string, string> = {
   1: 'Thứ 2',
   2: 'Thứ 3',
   3: 'Thứ 4',
@@ -83,14 +83,12 @@ const DAYS_MAP: Record<number, string> = {
   7: 'Chủ Nhật',
 };
 
-// Viết hoa chữ cái đầu tiên (vd: toán -> Toán)
 const capitalizeFirst = (str?: string) => {
   if (!str) return '';
   const trimmed = str.trim();
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 };
 
-// Định dạng ngày sinh
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return '';
   try {
@@ -143,6 +141,8 @@ export function TutorDetailModal({ tutor, onClose, onApprove, isPending }: Modal
   };
 
   const isApproved = tutor.verification_status === 'Approved' || tutor.status === 'approved';
+  const isRejected = tutor.verification_status === 'Rejected' || tutor.status === 'rejected';
+  const isPendingReview = !isApproved && !isRejected;
 
   let parsedSubjectDetails: SubjectDetailItem[] = [];
   if (tutor.subject_details) {
@@ -178,7 +178,11 @@ export function TutorDetailModal({ tutor, onClose, onApprove, isPending }: Modal
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-100 border border-emerald-400/30 text-[11px] font-bold flex items-center gap-1">
                     <ShieldCheck className="size-3.5 text-emerald-300" /> Gia sư đã xác minh
                   </span>
-                ) : (
+                ) : isRejected ? (
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-500/25 text-rose-100 border border-rose-400/40 text-[11px] font-bold flex items-center gap-1">
+                    <XCircle className="size-3.5 text-rose-200" /> Hồ sơ bị từ chối
+                  </span>
+                ): (
                   <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-100 border border-amber-400/30 text-[11px] font-bold flex items-center gap-1">
                     <Clock className="size-3.5 text-amber-300" /> Hồ sơ chờ duyệt
                   </span>
@@ -504,7 +508,7 @@ export function TutorDetailModal({ tutor, onClose, onApprove, isPending }: Modal
         </div>
 
         <div className="p-4 bg-slate-50 border-t border-slate-200/80 flex items-center justify-end shrink-0 gap-2">
-          {!isApproved && (
+          {!isPendingReview && (
             <button
               type="button"
               disabled={isPending}

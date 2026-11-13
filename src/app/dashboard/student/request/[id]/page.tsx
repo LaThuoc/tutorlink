@@ -233,7 +233,7 @@ export default function RequestDetailPage({ params }: { params: Promise<{ id: st
             </div>
           ) : (
             <div className="mt-6 rounded-2xl bg-slate-50 p-6 text-center text-xs text-slate-500">
-              🔒 Thông tin liên hệ của gia sư sẽ hiển thị khi yêu cầu được chuyển sang trạng thái &quot;Accepted&quot;.
+              Thông tin liên hệ của gia sư sẽ hiển thị khi yêu cầu được chuyển sang trạng thái &quot;Accepted&quot;.
             </div>
           )}
         </div>

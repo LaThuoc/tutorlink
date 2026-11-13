@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import React, { useState, useTransition, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   CheckCircle2, 
@@ -19,28 +20,100 @@ import {
 } from 'lucide-react';
 import TutorDashboardHeader from './TutorDashboardHeader';
 import TutorDashboardSidebar from './TutorDashboardSidebar';
-import { DashboardData } from '@/src/modules/tutor/getDashboardTutorData';
+import { DashboardData } from '@/src/types/tutorDashboard';
 import { updateBookingStatus } from '@/src/modules/tutor/getStudentRequest';
-
+import { createClient } from '@/src/lib/supabase/client';
 interface Props {
   data?: DashboardData;
 }
+const VN_DAY_NAMES: Record<number, string> = {
+  0: 'Chủ nhật',
+  1: 'Thứ 2',
+  2: 'Thứ 3',
+  3: 'Thứ 4',
+  4: 'Thứ 5',
+  5: 'Thứ 6',
+  6: 'Thứ 7',
+};
+
+function formatScheduleTextSafe(rawText?: string): string {
+  if (!rawText) return 'Thỏa thuận';
+  if (!rawText.includes('|')) return rawText;
+
+  return rawText
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((item) => {
+      if (item.includes('|')) {
+        const [datePart, timePart] = item.split('|').map((p) => p.trim());
+        const d = new Date(`${datePart}T00:00:00Z`);
+        if (!isNaN(d.getTime())) {
+          const dayName = VN_DAY_NAMES[d.getUTCDay()] || '';
+          return timePart ? `${dayName} (${timePart})` : dayName;
+        }
+        return timePart || item;
+      }
+      return item;
+    })
+    .join(', ');
+}
+
+
 
 export default function TutorDashboardClient({ data }: Props) {
+  const router = useRouter()
   const [acceptedRequests, setAcceptedRequests] = useState<Record<string, boolean>>({});
   const [isPending, startTransition] = useTransition();
-
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const tutorInfo = data?.tutorInfo;
   const upcomingBookings = data?.upcomingBookings || [];
   const pendingRequests = data?.pendingRequests || [];
   const stats = data?.stats;
   const latestReview = data?.latestReview;
 
+  useEffect(() => {
+    const supabase = createClient();
+
+    const channel = supabase
+      .channel('tutor-dashboard-overview-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'booking_requests' },
+        () => router.refresh()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'lessons' },
+        () => router.refresh()
+      )
+      .subscribe();
+
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        router.refresh();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [router]);
+
+
+
+
   const handleAcceptRequest = (id: string) => {
     startTransition(async () => {
       const res = await updateBookingStatus(id, 'Accepted');
       if (res.success) {
         setAcceptedRequests((prev) => ({ ...prev, [id]: true }));
+        router.refresh()
       }
     });
   };
@@ -128,7 +201,7 @@ export default function TutorDashboardClient({ data }: Props) {
                           </div>
                           <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
                             <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span className="font-medium">{item.scheduleText}</span>
+                            <span className="font-medium">{formatScheduleTextSafe(item.scheduleText)}</span>
                           </div>
                         </div>
                       ))}
@@ -177,7 +250,7 @@ export default function TutorDashboardClient({ data }: Props) {
                             <div className="text-xs text-slate-600 space-y-1 bg-white p-2.5 rounded-xl border border-slate-100">
                               <div className="font-bold text-blue-600">{req.subject}</div>
                               <div className="text-[11px] text-slate-500 flex items-center gap-1">
-                                <Clock className="w-3 h-3" /> {req.scheduleText}
+                                <Clock className="w-3 h-3" /> {formatScheduleTextSafe(req.scheduleText)}
                               </div>
                             </div>
 
@@ -190,7 +263,7 @@ export default function TutorDashboardClient({ data }: Props) {
                                   : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
                               }`}
                             >
-                              {isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+                              {acceptingId === req.id && <Loader2 className="w-3 h-3 animate-spin" />}
                               {isAccepted ? 'Đã chấp nhận ✔' : 'Chấp nhận'}
                             </button>
                           </div>

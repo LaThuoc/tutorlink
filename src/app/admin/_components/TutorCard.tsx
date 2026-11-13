@@ -16,6 +16,7 @@ interface TutorCardProps {
 export function TutorCard({ item, isPending, onReview, onSelect }: TutorCardProps) {
   const isApproved = item.verification_status === 'Approved' || item.status === 'approved';
   const isRejected = item.verification_status === 'Rejected' || item.status === 'rejected';
+  const isPendingReview = !isApproved && !isRejected;
 
   const getInitials = (name?: string) => {
     if (!name) return 'GS';
@@ -107,7 +108,7 @@ export function TutorCard({ item, isPending, onReview, onSelect }: TutorCardProp
           <Eye className="size-4 text-slate-500" /> Chi tiết
         </button>
 
-        {!isApproved ? (
+        {isPending ? (
           <>
             <button
               type="button"

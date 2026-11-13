@@ -12,17 +12,20 @@ export interface ExperienceItem {
   description: string
 }
 
-export interface EducationItem {
+export interface EducationItem {                
   id: string,
   period: string,
-  schoolName: string,
+  schoolName?: string,
   major: string,
   gpa?: string,
   status: string,
   description: string,
   degree?: string;
   school?: string;
+  detail?: string;
+  time?: string;
 }
+
 export interface CertificateItem{
   id: string,
   title: string,
@@ -62,10 +65,9 @@ export type TutorActionState = {
   message?: string
 }
 
-
 export interface ScheduleSlot  {
   id: string,
-  dayOfWeek: number,
+  dayOfWeek: number | string,
   startTime: string,
   endTime: string,
   isAvailable: boolean
@@ -172,14 +174,6 @@ export type Experience = {
   subtitle?: string; 
 };
 
-export type Education = { 
-  degree?: string; 
-  school?: string; 
-  period?: string; 
-  time?: string; 
-  detail?: string; 
-  status?: string; 
-};
 
 export type SlotRaw = 
   | string 
@@ -223,7 +217,7 @@ export type FullTutorDetail = {
   school_name: string;
   education: string;
   experiences: Experience[];
-  educations: Education[];
+  educations: EducationItem[];
   certificates: Item[];
   achievements: Item[];
   skills: string[];

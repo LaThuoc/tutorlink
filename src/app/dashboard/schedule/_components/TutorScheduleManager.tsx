@@ -62,7 +62,7 @@ export default function TutorScheduleManager({ userId, initialSlots, profileComp
   const slotsByDay = useMemo(() => {
     const map = new Map<number, ScheduleSlot[]>();
     for (const d of DAYS) map.set(d.value, []);
-    for (const s of slots) map.get(s.dayOfWeek)?.push(s);
+    for (const s of slots) map.get(Number(s.dayOfWeek))?.push(s);
     for (const list of map.values()) list.sort((a, b) => a.startTime.localeCompare(b.startTime));
     return map;
   }, [slots]);

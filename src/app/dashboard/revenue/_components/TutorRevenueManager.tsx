@@ -1,6 +1,6 @@
 'use client';
-
-import React, { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import React, { useState, useTransition, useEffect } from 'react';
 import { 
   DollarSign, CheckCircle2, RotateCcw, Wallet, Calendar, 
   Phone, Loader2, AlertCircle, TrendingUp, Trash2, CheckSquare, Square
@@ -12,8 +12,13 @@ import { archiveOrDeleteStudentRevenue } from '@/src/modules/tutor/deletePageTut
 interface Props {
   initialData: RevenueDashboardData;
 }
-
+function capitalizeFirst(str: string | null | undefined): string {
+  if (!str) return '';
+  const trimmed = str.trim();
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
 export default function TutorRevenueManager({ initialData }: Props) {
+  const router = useRouter()
   const [data, setData] = useState<RevenueDashboardData>(initialData);
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState<string>('');
@@ -22,6 +27,9 @@ export default function TutorRevenueManager({ initialData }: Props) {
 
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
 
+   const [confirmingResetStudent, setConfirmingResetStudent] = useState<StudentRevenueSummary | null>(null);
+  const [confirmingDeleteIds, setConfirmingDeleteIds] = useState<string[] | null>(null);
+
   const handleSelectAll = () => {
     if (selectedStudentIds.length === data.studentSummaries.length) {
       setSelectedStudentIds([]);
@@ -29,7 +37,6 @@ export default function TutorRevenueManager({ initialData }: Props) {
       setSelectedStudentIds(data.studentSummaries.map((s) => s.studentId));
     }
   };
-
   const handleToggleSelect = (studentId: string) => {
     setSelectedStudentIds((prev) =>
       prev.includes(studentId)
@@ -38,23 +45,25 @@ export default function TutorRevenueManager({ initialData }: Props) {
     );
   };
 
-  const handleDeleteStudents = (idsToDelete: string[]) => {
+
+   const openDeleteModal = (idsToDelete: string[]) => {
     if (idsToDelete.length === 0) return;
+    setErrorMsg('');
+    setSuccessMsg('');
+    setConfirmingDeleteIds(idsToDelete);
+  };
 
-    const confirmOk = window.confirm(
-      idsToDelete.length === 1
-        ? 'Xác nhận dọn dẹp dữ liệu học viên này?\n\nLưu ý: Các buổi đã học xong vẫn được GIỮ NGUYÊN để bảo toàn doanh thu, các buổi chưa học sẽ được dọn dẹp sạch giao diện.'
-        : `Xác nhận dọn dẹp ${idsToDelete.length} học viên đã chọn?\n\nLưu ý: Doanh thu của các buổi đã học xong vẫn được bảo toàn.`
-    );
-    if (!confirmOk) return;
+  const confirmDeleteStudents = () => {
+    if (!confirmingDeleteIds || confirmingDeleteIds.length === 0) return;
 
+    const targetIds = confirmingDeleteIds;
     setErrorMsg('');
     setSuccessMsg('');
 
     startTransition(async () => {
       let hasError = false;
 
-      for (const id of idsToDelete) {
+      for (const id of targetIds) {
         const res = await archiveOrDeleteStudentRevenue(id);
         if (!res.success) {
           hasError = true;
@@ -67,33 +76,39 @@ export default function TutorRevenueManager({ initialData }: Props) {
         setData((prev) => ({
           ...prev,
           studentSummaries: prev.studentSummaries.filter(
-            (s) => !idsToDelete.includes(s.studentId)
+            (s) => !targetIds.includes(s.studentId)
           ),
         }));
-        setSelectedStudentIds((prev) => prev.filter((id) => !idsToDelete.includes(id)));
-        setSuccessMsg(`Đã dọn dẹp thành công ${idsToDelete.length} học viên khỏi danh sách hiển thị.`);
+        setSelectedStudentIds((prev) => prev.filter((id) => !targetIds.includes(id)));
+        setSuccessMsg(`Đã dọn dẹp thành công ${targetIds.length} học viên khỏi danh sách hiển thị.`);
+        router.refresh();
       }
+      setConfirmingDeleteIds(null);
     });
   };
 
-  const handleResetBalance = (student: StudentRevenueSummary) => {
-    const confirmOk = window.confirm(
-      `Xác nhận học viên ${student.studentName} đã thanh toán ${student.unpaidAmount.toLocaleString('vi-VN')}đ?\n\nSố tiền chưa đóng của học viên này sẽ được Reset về 0đ.`
-    );
-    if (!confirmOk) return;
-
+  const openResetModal = (student: StudentRevenueSummary) => {
     setErrorMsg('');
     setSuccessMsg('');
-    setActiveResetId(student.studentId);
+    setConfirmingResetStudent(student);
+  };
+
+  const confirmResetBalance = () => {
+    if (!confirmingResetStudent) return;
+
+    const targetStudent = confirmingResetStudent;
+    setErrorMsg('');
+    setSuccessMsg('');
+    setActiveResetId(targetStudent.studentId);
 
     startTransition(async () => {
-      const res = await resetStudentBalance(student.studentId);
+      const res = await resetStudentBalance(targetStudent.studentId);
       setActiveResetId(null);
 
       if (res.success) {
         setData((prev) => {
           const updatedSummaries = prev.studentSummaries.map((s) => {
-            if (s.studentId === student.studentId) {
+            if (s.studentId === targetStudent.studentId) {
               return {
                 ...s,
                 paidAmount: s.paidAmount + s.unpaidAmount,
@@ -106,18 +121,43 @@ export default function TutorRevenueManager({ initialData }: Props) {
 
           return {
             ...prev,
-            totalPaidRevenue: prev.totalPaidRevenue + student.unpaidAmount,
-            totalUnpaidRevenue: prev.totalUnpaidRevenue - student.unpaidAmount,
+            totalPaidRevenue: prev.totalPaidRevenue + targetStudent.unpaidAmount,
+            totalUnpaidRevenue: prev.totalUnpaidRevenue - targetStudent.unpaidAmount,
             studentSummaries: updatedSummaries,
           };
         });
-        setSuccessMsg(`Đã xác nhận thu tiền và reset học phí của học viên ${student.studentName} về 0đ.`);
+        setSuccessMsg(
+          `Đã xác nhận thu tiền và reset học phí của học viên ${targetStudent.studentName} về 0đ.`
+        );
+        router.refresh(); 
       } else {
         setErrorMsg(res.error || 'Có lỗi xảy ra khi reset số tiền.');
       }
+      setConfirmingResetStudent(null);
     });
   };
 
+
+  useEffect(() => {
+    if (!successMsg) return;
+
+    const timer = setTimeout(() => {
+      setSuccessMsg('');
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [successMsg]);
+
+  useEffect(() => {
+    if (!errorMsg) return;
+
+    const timer = setTimeout(() => {
+      setErrorMsg('');
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [errorMsg]);
+  
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -208,11 +248,11 @@ export default function TutorRevenueManager({ initialData }: Props) {
                 <button
                   type="button"
                   disabled={isPending}
-                  onClick={() => handleDeleteStudents(selectedStudentIds)}
+                  onClick={() => openDeleteModal(selectedStudentIds)}
                   className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-                  Dọn dẹp ({selectedStudentIds.length}) học viên đã chọn
+                  Xóa danh sách ({selectedStudentIds.length}) học viên đã chọn
                 </button>
               )}
             </div>
@@ -250,7 +290,7 @@ export default function TutorRevenueManager({ initialData }: Props) {
                     )}
                     <div>
                       <h4 className="font-bold text-slate-900 text-sm">{st.studentName}</h4>
-                      <p className="text-xs text-blue-600 font-semibold">{st.subject}</p>
+                      <p className="text-xs text-blue-600 font-semibold">{capitalizeFirst(st.subject)}</p>
                       {st.phone && (
                         <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
                           <Phone className="size-3" /> {st.phone}
@@ -279,7 +319,7 @@ export default function TutorRevenueManager({ initialData }: Props) {
                     {st.unpaidAmount > 0 ? (
                       <button
                         disabled={isPending && activeResetId === st.studentId}
-                        onClick={() => handleResetBalance(st)}
+                        onClick={() => openResetModal(st)}
                         className="w-full md:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50"
                       >
                         {isPending && activeResetId === st.studentId ? (
@@ -298,7 +338,7 @@ export default function TutorRevenueManager({ initialData }: Props) {
                     <button
                       type="button"
                       disabled={isPending}
-                      onClick={() => handleDeleteStudents([st.studentId])}
+                      onClick={() => openDeleteModal([st.studentId])}
                       title="Dọn dẹp danh sách sinh viên nghỉ học"
                       className="p-2.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                     >
@@ -334,6 +374,108 @@ export default function TutorRevenueManager({ initialData }: Props) {
           </div>
         )}
       </section>
+
+        {confirmingResetStudent && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid place-items-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-2xl bg-emerald-50 text-emerald-600 grid place-items-center shrink-0">
+                <Wallet className="size-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Xác nhận đã thu học phí</h3>
+                <p className="text-[11px] text-slate-400">Cập nhật trạng thái thanh toán & doanh thu thực nhận</p>
+              </div>
+            </div>
+
+            <div className="bg-emerald-50/50 border border-emerald-100 rounded-2xl p-4 text-xs text-slate-600 space-y-2 leading-relaxed">
+              <p>
+                Xác nhận học viên <b className="text-slate-900">{confirmingResetStudent.studentName}</b> đã thanh toán số tiền:
+              </p>
+              <div className="text-xl font-black text-emerald-600">
+                {confirmingResetStudent.unpaidAmount.toLocaleString('vi-VN')}đ
+                <span className="text-xs font-semibold text-slate-500 ml-1.5">
+                  ({confirmingResetStudent.unpaidLessonsCount} buổi học)
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 pt-1 border-t border-emerald-200/60">
+                Sau khi xác nhận, số tiền chưa đóng của học viên này sẽ được đặt lại về <b className="text-slate-800">0đ</b> và cộng vào Tổng doanh thu đã thu.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setConfirmingResetStudent(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={confirmResetBalance}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm shadow-emerald-600/20 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              >
+                {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                Xác nhận đã thu tiền
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmingDeleteIds && confirmingDeleteIds.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm grid place-items-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-2xl bg-rose-50 text-rose-600 grid place-items-center shrink-0">
+                <Trash2 className="size-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {confirmingDeleteIds.length === 1
+                    ? 'Dọn dẹp dữ liệu học viên'
+                    : `Dọn dẹp ${confirmingDeleteIds.length} học viên đã chọn`}
+                </h3>
+                <p className="text-[11px] text-slate-400">An toàn tuyệt đối cho dữ liệu doanh thu đã ghi nhận</p>
+              </div>
+            </div>
+
+            <div className="bg-rose-50/40 border border-rose-100 rounded-2xl p-4 text-xs text-slate-600 space-y-2 leading-relaxed">
+              <p>
+                {confirmingDeleteIds.length === 1
+                  ? 'Bạn có chắc chắn muốn ẩn học viên này khỏi danh sách quản lý học phí?'
+                  : `Bạn có chắc chắn muốn ẩn ${confirmingDeleteIds.length} học viên đã chọn khỏi danh sách quản lý học phí?`}
+              </p>
+              <p className="text-[11px] text-slate-500 pt-1 border-t border-rose-200/50">
+                <b className="text-slate-700">Lưu ý:</b> Các buổi đã học xong vẫn được <b className="text-emerald-700">GIỮ NGUYÊN</b> để bảo toàn tổng doanh thu của bạn; chỉ các buổi chưa học được dọn dẹp khỏi giao diện.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setConfirmingDeleteIds(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer disabled:opacity-50"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={confirmDeleteStudents}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm shadow-rose-600/20 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              >
+                {isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                Xác nhận dọn dẹp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

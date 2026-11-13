@@ -244,3 +244,66 @@ export async function getPendingCertificates() {
     return { success: false, error: msg, data: [] };
   }
 }
+
+
+
+
+export type ContactStatus = 'pending' | 'processing' | 'resolved' | 'archived';
+
+// Kiểm tra quyền Admin trước khi thao tác
+async function verifyAdmin() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Chưa đăng nhập');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (profile?.role !== 'admin') {
+    throw new Error('Không có quyền truy cập');
+  }
+  return supabase;
+}
+
+export async function updateContactStatus(id: string, status: ContactStatus) {
+  try {
+    const supabase = await verifyAdmin();
+
+    const { error } = await supabase
+      .from('contact_messages')
+      .update({ status })
+      .eq('id', id);
+
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+
+    revalidatePath('/admin/contacts');
+    return { ok: true };
+  } catch (err: unknown) {
+    return { ok: false, error: (err as Error).message || 'Lỗi hệ thống' };
+  }
+}
+
+export async function deleteContactMessage(id: string) {
+  try {
+    const supabase = await verifyAdmin();
+
+    const { error } = await supabase
+      .from('contact_messages')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+
+    revalidatePath('/admin/contacts');
+    return { ok: true };
+  } catch (err: unknown) {
+    return { ok: false, error: (err as Error).message || 'Lỗi hệ thống' };
+  }
+}

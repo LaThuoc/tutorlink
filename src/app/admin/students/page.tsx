@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useTransition } from 'react';
 import { 
-  Users, Search, Filter, Eye, UserX, UserCheck, Loader2, Mail, Phone, MapPin
+  Users, Search, Filter, Eye, UserX, UserCheck, Loader2, Mail, Phone, MapPin,
+  CheckCircle2, AlertCircle, X
 } from 'lucide-react';
 import { StudentDetailModal, StudentProfileData } from '../_components/StudentDetailModal';
 import { createClient } from '@/src/lib/supabase/client';
@@ -12,11 +13,31 @@ export default function AdminStudentsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked'>('all');
-  
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [confirmingBlockAction, setConfirmingBlockAction] = useState<{
+    studentId: string;
+    studentName: string;
+    nextStatus: 'active' | 'blocked';
+  } | null>(null);
+
   const [selectedStudent, setSelectedStudent] = useState<StudentProfileData | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const supabase = createClient();
+
+  useEffect(() => {
+    if (!successMsg) return;
+    const timer = setTimeout(() => setSuccessMsg(''), 5000);
+    return () => clearTimeout(timer);
+  }, [successMsg]);
+
+  useEffect(() => {
+    if (!errorMsg) return;
+    const timer = setTimeout(() => setErrorMsg(''), 5000);
+    return () => clearTimeout(timer);
+  }, [errorMsg]);
+
 
   useEffect(() => {
     let isMounted = true;
@@ -35,13 +56,14 @@ export default function AdminStudentsPage() {
           district,
           date_of_birth,
           gender,
+          status,
           created_at
         `)
         .eq('role', 'student')
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('❌ Lỗi từ Supabase:', error.message);
+        console.error('Lỗi từ Supabase:', error.message);
       }
 
       if (isMounted) {
@@ -66,10 +88,26 @@ export default function AdminStudentsPage() {
 
   const handleToggleBlockStatus = (studentId: string, currentStatus?: string) => {
     const nextStatus = currentStatus === 'blocked' ? 'active' : 'blocked';
-    const actionText = nextStatus === 'blocked' ? 'KHÓA' : 'MỞ KHÓA';
+    const foundStudent = students.find((s) => s.user_id === studentId);
+    const studentName = foundStudent?.full_name || 'học viên này';
 
-    if (!confirm(`Bạn có chắc chắn muốn ${actionText} tài khoản học viên này?`)) return;
+    setErrorMsg('');
+    setSuccessMsg('');
+    setConfirmingBlockAction({
+      studentId,
+      studentName,
+      nextStatus,
+    });
+    
+  };
+   const confirmToggleBlockStatus = () => {
+    if (!confirmingBlockAction) return;
 
+    const { studentId, studentName, nextStatus } = confirmingBlockAction;
+    const actionLabel = nextStatus === 'blocked' ? 'khóa' : 'mở khóa';
+
+    setErrorMsg('');
+    setSuccessMsg('');
     startTransition(async () => {
       const { error } = await supabase
         .from('profiles')
@@ -83,8 +121,11 @@ export default function AdminStudentsPage() {
         if (selectedStudent && selectedStudent.user_id === studentId) {
           setSelectedStudent((prev) => prev ? { ...prev, status: nextStatus } : null);
         }
+        setConfirmingBlockAction(null);
+        setSuccessMsg(`Đã ${actionLabel} tài khoản của ${studentName} thành công.`);
       } else {
-        alert(`Lỗi khi ${actionText.toLowerCase()} tài khoản: ` + error.message);
+        setConfirmingBlockAction(null);
+        setErrorMsg(`Lỗi khi ${actionLabel} tài khoản: ` + error.message);
       }
     });
   };
@@ -133,6 +174,20 @@ export default function AdminStudentsPage() {
           <p className="text-2xl font-black text-rose-600">{blockedStudents}</p>
         </div>
       </div>
+
+       {errorMsg && (
+        <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-bold flex items-center gap-2">
+          <AlertCircle className="size-4 shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+      {successMsg && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-2xl text-xs font-bold flex items-center gap-2">
+          <CheckCircle2 className="size-4 shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
 
       {/* 2. SEARCH & FILTER BAR */}
       <div className="bg-white p-4 rounded-3xl border border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -278,6 +333,95 @@ export default function AdminStudentsPage() {
         onToggleBlockStatus={handleToggleBlockStatus}
         isPending={isPending}
       />
+       {confirmingBlockAction && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                {confirmingBlockAction.nextStatus === 'blocked' ? (
+                  <>
+                    <UserX className="size-5 text-rose-600" />
+                    Xác nhận khóa tài khoản
+                  </>
+                ) : (
+                  <>
+                    <UserCheck className="size-5 text-emerald-600" />
+                    Xác nhận mở khóa tài khoản
+                  </>
+                )}
+              </h3>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setConfirmingBlockAction(null)}
+                className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div
+              className={`rounded-2xl p-4 text-xs text-slate-600 space-y-2 leading-relaxed border ${
+                confirmingBlockAction.nextStatus === 'blocked'
+                  ? 'bg-rose-50/40 border-rose-100'
+                  : 'bg-emerald-50/40 border-emerald-100'
+              }`}
+            >
+              <p>
+                Bạn có chắc chắn muốn{' '}
+                <strong
+                  className={
+                    confirmingBlockAction.nextStatus === 'blocked'
+                      ? 'text-rose-700'
+                      : 'text-emerald-700'
+                  }
+                >
+                  {confirmingBlockAction.nextStatus === 'blocked' ? 'KHÓA' : 'MỞ KHÓA'}
+                </strong>{' '}
+                tài khoản của học viên{' '}
+                <strong className="text-slate-900">{confirmingBlockAction.studentName}</strong>?
+              </p>
+              <p className="text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
+                {confirmingBlockAction.nextStatus === 'blocked'
+                  ? 'Học viên này sẽ không thể đăng nhập hoặc đặt lịch học mới cho đến khi được mở khóa lại.'
+                  : 'Học viên này sẽ có thể đăng nhập và sử dụng lại đầy đủ tính năng trên hệ thống.'}
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() => setConfirmingBlockAction(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all cursor-pointer disabled:opacity-50"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={confirmToggleBlockStatus}
+                className={`px-5 py-2.5 rounded-xl text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                  confirmingBlockAction.nextStatus === 'blocked'
+                    ? 'bg-rose-600 hover:bg-rose-700'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                {isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : confirmingBlockAction.nextStatus === 'blocked' ? (
+                  <UserX className="size-4" />
+                ) : (
+                  <UserCheck className="size-4" />
+                )}
+                {confirmingBlockAction.nextStatus === 'blocked'
+                  ? 'Xác nhận Khóa'
+                  : 'Xác nhận Mở khóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
